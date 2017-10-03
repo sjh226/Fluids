@@ -203,7 +203,7 @@ def clean_data(df, single=False):
 
 if __name__ == '__main__':
     df_meas = enbase_fetch()
-    df_cleaned = clean_data(df_meas, single=True)
+    # df_cleaned = clean_data(df_meas, single=True)
     df_ticket = ticket_fetch()
 
     df_meas.to_csv('enb.csv')
