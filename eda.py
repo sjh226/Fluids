@@ -14,7 +14,6 @@ def enbase_fetch():
     cursor = connection.cursor()
     SQLCommand = ("""
         SELECT GDP._id
-              ,GDP.totalWaterRemoved
               ,GDP.oldWaterInventory
               ,GDP.totalRunTicketWater
               ,GDP.newWaterInventory
