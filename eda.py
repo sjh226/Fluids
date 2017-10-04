@@ -205,5 +205,5 @@ if __name__ == '__main__':
     # df_cleaned = clean_data(df_meas, single=True)
     df_ticket = ticket_fetch()
 
-    df_meas.to_csv('enb.csv')
-    df_ticket.to_csv('ticket.csv')
+    # df_meas.to_csv('enb.csv')
+    # df_ticket.to_csv('ticket.csv')
