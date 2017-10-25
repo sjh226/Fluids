@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import pyodbc
 import sys
+import pickle
 
 
 def enbase_fetch():
@@ -203,8 +204,9 @@ def clean_data(df, single=False):
 
 if __name__ == '__main__':
     df_meas = enbase_fetch()
-    df_max = clean_data(df_meas, single=True)
+    # df_max = clean_data(df_meas, single=True)
     # df_ticket = ticket_fetch()
 
     # df_meas.to_csv('enb.csv')
+    pickle.dump(df_meas, open('data/enb.pkl', 'wb'))
     # df_ticket.to_csv('ticket.csv')
