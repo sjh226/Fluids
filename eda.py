@@ -27,6 +27,7 @@ def enbase_fetch():
         	  ,GDD.waterGaugeQuarter
         	  ,GDD.newWaterInventory AS GDDnewWater
         	  ,GDD.newOilInventory AS GDDnewOil
+              ,GDD.createdDate
               ,Tk.MaxVol
               ,Tk.Height
               ,Tk.TankType
