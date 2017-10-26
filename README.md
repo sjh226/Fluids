@@ -9,11 +9,11 @@ the last previous calculated liquid rate per day based on the last two gauges.
 For spill prevention it applies this rate to the last most full tank as it assumes
 worst case is all liquid goes into that tank.
 
-The new algorithm will include:\n
-    •	Historical production rates by gauges (not just the last gauge to gauge)\n
-    •	Liquid gas ratio\n
-    •	Historical haul frequency\n
-    •	Any data that shows artificial lift was installed or optimized\n
+The new algorithm will include:<br />
+    •	Historical production rates by gauges (not just the last gauge to gauge)<br />
+    •	Liquid gas ratio<br />
+    •	Historical haul frequency<br />
+    •	Any data that shows artificial lift was installed or optimized<br />
 
 One requirement will be to map out wells to their associated tanks and weight how
 liquids are being distributed across multiple tanks. Next would be to find a
