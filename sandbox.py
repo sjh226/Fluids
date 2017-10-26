@@ -24,9 +24,9 @@ def ticket_org(df):
 def ticket_plot(df, data_source):
 	plt.close()
 	if data_source == 'ticket':
-		label = 'Open Ticket'
-		title = 'Open Measurement'
-		save = 'open_meas'
+		label = 'Close Ticket'
+		title = 'Close Measurement'
+		save = 'close_meas'
 	elif data_source == 'enb':
 		label = 'Liquid Gauge'
 		title = 'Gauge Measurement'
@@ -37,11 +37,11 @@ def ticket_plot(df, data_source):
 	# ax.plot(df_g[df_g['createdDate'] > np.min(df['runTicketStartDate'])].values, df_g['meas'], 'k-', label='Gauge Measurement')
 	ax.plot(df['Date'].values, df['tankHeight'].values / 12, 'r--', label='Max Tank Height')
 	if data_source == 'ticket':
-		ax.plot(df['Date'].values[::20], df['rate'].values[::20], 'b--', label='Measurement Rate')
+		ax.plot(df['Date'].values, df['rate'].values, 'b--', label='Measurement Rate')
 	elif data_source == 'enb':
 		ax.plot(df['Date'].values, df['rate'].values, 'b--', label='Measurement Rate')
 	ax.set_xlabel('Date')
-	ax.set_ylabel('Open Measurement (feet)')
+	ax.set_ylabel('Close Measurement (feet)')
 	plt.legend()
 	plt.title('{} on Tank {}'.format(title, df['tankCode'].unique()[0]))
 	plt.savefig('figures/{}.png'.format(save))
@@ -49,7 +49,7 @@ def ticket_plot(df, data_source):
 def feat_eng(df, source):
 	if source == 'ticket':
 		df['Date'] = pd.to_datetime(df['runTicketStartDate'].values)
-		df['meas'] = df['openMeasFeet'].values + ((df['openMeasInches'].values + df['openMeasFract'].values) / 12)
+		df['meas'] = df['closeMeasFeet'].values + ((df['closeMeasInches'].values + df['closeMeasFract'].values) / 12)
 		df['rate'] = df['meas'] - df['meas'].shift(-1)
 		df['weights'] = (np.mean(df[df['Date'] > df['Date'] - \
 									 datetime.timedelta(days=30)]['meas']) * .7) + \
@@ -85,4 +85,4 @@ if __name__ == '__main__':
 	df1 = feat_eng(tank_ticket, 'ticket')
 	df2 = feat_eng(tank_df, 'enb')
 	ticket_plot(df1, 'ticket')
-	ticket_plot(df2, 'enb')
+	# ticket_plot(df2, 'enb')
