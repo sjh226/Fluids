@@ -118,7 +118,7 @@ def prod_plot(df):
 if __name__ == '__main__':
 	df = prod_query()
 	# oil_df = oil_well(df)
-	# prod_plot(oil_df)
+	prod_plot(df)
 
-	df_lift = lift_query()
+	# df_lift = lift_query()
 	# Need to parse out when status = 'Down - Gas Lift'
