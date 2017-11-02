@@ -22,8 +22,15 @@ def prod_query():
 			  ,P.DateKey
 		FROM [OperationsDataMart].[Facts].[Production] AS P
 		JOIN [OperationsDataMart].[Dimensions].[Wells] AS W
-			ON P.Wellkey = W.Wellkey;
+			ON P.Wellkey = W.Wellkey
+		WHERE P.Wellkey = 2745;
 	""")
+
+	# (SELECT TOP 1 MP.Wellkey
+	# FROM [OperationsDataMart].[Facts].[Production] AS MP
+	# WHERE MP.Oil > 1 AND MP.Water
+	# GROUP BY MP.Wellkey
+	# ORDER BY COUNT(MP.Oil) DESC)
 
 	cursor.execute(SQLCommand)
 	results = cursor.fetchall()
@@ -42,15 +49,16 @@ def prod_query():
 	return df.drop_duplicates()
 
 def oil_well(df):
-    max_rows = 0
-    max_well = None
-    for well in df['WellFlac'].unique():
-        row_count = df[pd.notnull(df[df['Well1_WellFlac'] == well]['Oil'])].shape[0]
-        if row_count > max_rows:
-            max_rows = row_count
-            max_well = well
-    df_out = df[df['WellFlac'] == max_well]
-    return df_out
+	max_rows = 0
+	max_well = None
+	for well in df['WellFlac'].unique():
+		print(well)
+		row_count = df[(df['WellFlac'] == well) & pd.notnull(df['Oil'])].shape[0]
+		if row_count > max_rows:
+			max_rows = row_count
+			max_well = well
+	df_out = df[df['WellFlac'] == max_well]
+	return df_out
 
 def lift_query():
 	try:
@@ -108,9 +116,9 @@ def prod_plot(df):
 
 
 if __name__ == '__main__':
-	# df = prod_query()
-    oil_df = oil_well(df)
+	df = prod_query()
+	# oil_df = oil_well(df)
 	# prod_plot(oil_df)
 
-    df_lift = lift_query()
-    # Need to parse out when status = 'Down - Gas Lift'
+	df_lift = lift_query()
+	# Need to parse out when status = 'Down - Gas Lift'
