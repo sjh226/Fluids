@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import datetime
+from scipy import stats
 
 def max_tank(df):
 	tank_code = 0

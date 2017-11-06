@@ -5,7 +5,8 @@ import matplotlib.pyplot as plt
 from pandas.plotting import autocorrelation_plot
 from pandas import datetime
 from statsmodels.tsa.arima_model import ARIMA
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_squared_error, r2_score
+from scipy import stats
 
 
 def prod_query():
@@ -119,6 +120,17 @@ def prod_plot(df):
 	plt.title('Production on Well {}'.format(df['WellFlac'].unique()[0]))
 	plt.savefig('figures/lgr.png')
 
+def iqr_outlier(df):
+	df_out = df
+	for value in ['Oil', 'Water', 'Gas']:
+		median = np.median(df_out[value])
+		iqr_25_50 = stats.iqr(df_out[value], rng=(25, 50))
+		iqr_50_75 = stats.iqr(df_out[value], rng=(50, 75))
+		lower_bound = median - iqr_25_50
+		upper_bound = median + iqr_50_75
+		df_out = df_out[(df_out[value] > lower_bound) & (df_out[value] < upper_bound)]
+	return df_out
+
 def lgr(df, plot=False):
 	# Look at gas production
 	# Create a model to predict the LGR over time
@@ -142,8 +154,11 @@ def lgr(df, plot=False):
 	pred = model_fit.predict(start=np.min(lgr_df['date']), end=np.max(lgr_df['date'][:-10]))
 	forecast, std_error, conf_int  = model_fit.forecast(steps=len(test))
 	error = mean_squared_error(test, forecast)
-	print('RMSE of forecast in %')
-	print(np.sqrt(error))
+	r_2 = r2_score(test, forecast)
+	print('RMSE of forecast in %\n---------------')
+	print(np.sqrt(error), '\n')
+	print('R^2 of forecast\n---------------')
+	print(r_2)
 	# print(ARIMA.score(model_fit))
 
 	if plot == True:
@@ -170,8 +185,9 @@ def arima_params(df):
 
 if __name__ == '__main__':
 	df = prod_query()
+	lim_df = iqr_outlier(df)
 	# oil_df = oil_well(df)
-	lgr(df)
+	lgr(lim_df, plot=True)
 	# arima_params(df[['DateKey', 'lgr']].values)
 	# prod_plot(df)
 
