@@ -2,6 +2,9 @@ import pyodbc
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from pandas.plotting import autocorrelation_plot
+from pandas import datetime
+from statsmodels.tsa.arima_model import ARIMA
 
 
 def prod_query():
@@ -104,7 +107,8 @@ def prod_plot(df):
 
 	ax.plot(df['Date'].values, df['Gas'].values, 'k-', label='Gas')
 	ax.plot(df['Date'].values, df['Oil'].values, 'r-', label='Oil')
-	ax.plot(df['Date'].values, df['Water'], 'b-', label='Water')
+	ax.plot(df['Date'].values, df['Water'].values, 'b-', label='Water')
+	ax.plot(df['Date'].values, df['lgr'].values, 'g--', label='LGR')
 
 	ax.set_xlabel('Date')
 	ax.set_ylabel('MCF (log scale)')
@@ -112,13 +116,57 @@ def prod_plot(df):
 
 	plt.legend()
 	plt.title('Production on Well {}'.format(df['WellFlac'].unique()[0]))
-	plt.savefig('figures/production.png')
+	plt.savefig('figures/lgr.png')
+
+def lgr(df, plot=False):
+	# Look at gas production
+	# Create a model to predict the LGR over time
+	# Input gas production and LGR prediction to create oil prediction
+	# Add in artificial lift analysis (enter a 1 for when a change occurs and
+	# created a "dummy" average for days since changed)
+
+	df['lgr'] = (df['Oil'] + df['Water']) / df['Gas']
+	df['date'] = pd.to_datetime(df['DateKey'])
+
+	lgr_df = df[['date', 'lgr']]
+	lgr_df.replace(np.inf, np.nan, inplace=True)
+	lgr_df.dropna(inplace=True)
+
+	arima_df = lgr_df.set_index('date')
+
+	arima_model = ARIMA(arima_df, order=(0,0,5))
+	model_fit = arima_model.fit()
+	# print(model_fit.summary())
+	pred = model_fit.predict(start=np.min(lgr_df['date']), end=np.max(lgr_df['date']))
+	forecast = model_fit.forecast()
+
+	if plot == True:
+		plt.close()
+		fig, ax = plt.subplots(1,1,figsize=(20,10))
+
+		ax.plot(lgr_df['date'].values, lgr_df['lgr'].values, 'k-', label='True LGR')
+		ax.plot(lgr_df['date'].values, pred, 'b-', label='Predicted LGR')
+		ax.plot
+
+		ax.set_xlabel('Date')
+		ax.set_ylabel('Liquid to Gas Ratio')
+
+		plt.legend()
+		plt.title('LGR on Well {}'.format(df['WellFlac'].unique()[0]))
+		plt.savefig('figures/lgr_pred.png')
+
+def arima_params(df):
+	plt.close()
+	autocorrelation_plot(df)
+	plt.show()
 
 
 if __name__ == '__main__':
 	df = prod_query()
 	# oil_df = oil_well(df)
-	prod_plot(df)
+	lgr(df, plot=True)
+	# arima_params(df[['DateKey', 'lgr']].values)
+	# prod_plot(df)
 
 	# df_lift = lift_query()
 	# Need to parse out when status = 'Down - Gas Lift'
