@@ -148,10 +148,13 @@ def lgr(df, plot=False):
 	# Train test split
 	arima_df = lgr_df.set_index('date')
 	train, test = arima_df[:-10], arima_df[-10:]
-	arima_model = ARIMA(train, order=(0,0,10))
-	model_fit = arima_model.fit()
+
+	# Can we grid search these parameters?
+	# (9, 1, 1) -> 0.045661 RMSE
+	arima_model = ARIMA(train, order=(9, 1, 1))
+	model_fit = arima_model.fit(disp=0)
 	# print(model_fit.summary())
-	pred = model_fit.predict(start=np.min(lgr_df['date']), end=np.max(lgr_df['date'][:-10]))
+	pred = model_fit.predict()
 	forecast, std_error, conf_int  = model_fit.forecast(steps=len(test))
 	error = mean_squared_error(test, forecast)
 	r_2 = r2_score(test, forecast)
@@ -185,9 +188,12 @@ def arima_params(df):
 
 if __name__ == '__main__':
 	df = prod_query()
+
+	# Try limiting on a single variable
 	lim_df = iqr_outlier(df)
 	# oil_df = oil_well(df)
-	lgr(lim_df, plot=True)
+
+	lgr(df, plot=False)
 	# arima_params(df[['DateKey', 'lgr']].values)
 	# prod_plot(df)
 
