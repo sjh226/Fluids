@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from pandas.plotting import autocorrelation_plot
 from pandas import datetime
 from statsmodels.tsa.arima_model import ARIMA
+from sklearn.metrics import mean_squared_error
 
 
 def prod_query():
@@ -132,21 +133,27 @@ def lgr(df, plot=False):
 	lgr_df.replace(np.inf, np.nan, inplace=True)
 	lgr_df.dropna(inplace=True)
 
+	# Train test split
 	arima_df = lgr_df.set_index('date')
-
-	arima_model = ARIMA(arima_df, order=(0,0,5))
+	train, test = arima_df[:-10], arima_df[-10:]
+	arima_model = ARIMA(train, order=(0,0,10))
 	model_fit = arima_model.fit()
 	# print(model_fit.summary())
-	pred = model_fit.predict(start=np.min(lgr_df['date']), end=np.max(lgr_df['date']))
-	forecast = model_fit.forecast()
+	pred = model_fit.predict(start=np.min(lgr_df['date']), end=np.max(lgr_df['date'][:-10]))
+	forecast, std_error, conf_int  = model_fit.forecast(steps=len(test))
+	error = mean_squared_error(test, forecast)
+	print('RMSE of forecast in %')
+	print(np.sqrt(error))
+	# print(ARIMA.score(model_fit))
 
 	if plot == True:
 		plt.close()
 		fig, ax = plt.subplots(1,1,figsize=(20,10))
 
 		ax.plot(lgr_df['date'].values, lgr_df['lgr'].values, 'k-', label='True LGR')
-		ax.plot(lgr_df['date'].values, pred, 'b-', label='Predicted LGR')
-		ax.plot
+		ax.plot(lgr_df['date'].values[:-10], pred, 'r-', label='Predicted LGR')
+		# ax.plot(lgr_df['date'].values, lgr_df['lgr'].values, 'k-', label='True LGR')
+		# ax.plot(lgr_df['date'].values, pred, 'b-', label='Predicted LGR')
 
 		ax.set_xlabel('Date')
 		ax.set_ylabel('Liquid to Gas Ratio')
@@ -164,7 +171,7 @@ def arima_params(df):
 if __name__ == '__main__':
 	df = prod_query()
 	# oil_df = oil_well(df)
-	lgr(df, plot=True)
+	lgr(df)
 	# arima_params(df[['DateKey', 'lgr']].values)
 	# prod_plot(df)
 
