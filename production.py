@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from pandas.plotting import autocorrelation_plot
-from pandas import datetime
 from statsmodels.tsa.arima_model import ARIMA
 from sklearn.metrics import mean_squared_error, r2_score
 from scipy import stats
@@ -27,15 +26,10 @@ def prod_query():
 			  ,P.DateKey
 		FROM [OperationsDataMart].[Facts].[Production] AS P
 		JOIN [OperationsDataMart].[Dimensions].[Wells] AS W
-			ON P.Wellkey = W.Wellkey
-		WHERE P.Wellkey = 2745;
+			ON P.Wellkey = W.Wellkey;
 	""")
 
-	# (SELECT TOP 1 MP.Wellkey
-	# FROM [OperationsDataMart].[Facts].[Production] AS MP
-	# WHERE MP.Oil > 1 AND MP.Water
-	# GROUP BY MP.Wellkey
-	# ORDER BY COUNT(MP.Oil) DESC)
+			# WHERE P.Wellkey = 2745
 
 	cursor.execute(SQLCommand)
 	results = cursor.fetchall()
@@ -52,18 +46,6 @@ def prod_query():
 	df['Date'] = pd.to_datetime(df['DateKey'])
 
 	return df.drop_duplicates()
-
-def oil_well(df):
-	max_rows = 0
-	max_well = None
-	for well in df['WellFlac'].unique():
-		print(well)
-		row_count = df[(df['WellFlac'] == well) & pd.notnull(df['Oil'])].shape[0]
-		if row_count > max_rows:
-			max_rows = row_count
-			max_well = well
-	df_out = df[df['WellFlac'] == max_well]
-	return df_out
 
 def lift_query():
 	try:
@@ -150,8 +132,8 @@ def lgr(df, plot=False):
 	train, test = arima_df[:-10], arima_df[-10:]
 
 	# Can we grid search these parameters?
-	# (9, 1, 1) -> 0.045661 RMSE
-	arima_model = ARIMA(train, order=(9, 1, 1))
+	# (9, 1, 7) -> 0.0455929 RMSE
+	arima_model = ARIMA(train, order=(9, 1, 7))
 	model_fit = arima_model.fit(disp=0)
 	# print(model_fit.summary())
 	pred = model_fit.predict()
@@ -178,7 +160,7 @@ def lgr(df, plot=False):
 
 		plt.legend()
 		plt.title('LGR on Well {}'.format(df['WellFlac'].unique()[0]))
-		plt.savefig('figures/lgr_pred.png')
+		plt.savefig('figures/lgr_{}.png'.format(df['WellFlac'].unique()[0]))
 
 def arima_params(df):
 	plt.close()
@@ -190,10 +172,10 @@ if __name__ == '__main__':
 	df = prod_query()
 
 	# Try limiting on a single variable
-	lim_df = iqr_outlier(df)
-	# oil_df = oil_well(df)
+	# lim_df = iqr_outlier(df)
 
-	lgr(df, plot=False)
+	for well in df['WellFlac'].unique()[:20]:
+		lgr(df[df['WellFlac'] == well], plot=True)
 	# arima_params(df[['DateKey', 'lgr']].values)
 	# prod_plot(df)
 
