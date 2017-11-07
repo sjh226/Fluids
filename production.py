@@ -26,7 +26,8 @@ def prod_query():
 			  ,P.DateKey
 		FROM [OperationsDataMart].[Facts].[Production] AS P
 		JOIN [OperationsDataMart].[Dimensions].[Wells] AS W
-			ON P.Wellkey = W.Wellkey;
+			ON P.Wellkey = W.Wellkey
+		WHERE P.Wellkey = 2745;
 	""")
 
 			# WHERE P.Wellkey = 2745
@@ -104,7 +105,7 @@ def prod_plot(df):
 
 def iqr_outlier(df):
 	df_out = df
-	for value in ['Oil', 'Water', 'Gas']:
+	for value in ['Oil']:
 		median = np.median(df_out[value])
 		iqr_25_50 = stats.iqr(df_out[value], rng=(25, 50))
 		iqr_50_75 = stats.iqr(df_out[value], rng=(50, 75))
@@ -133,7 +134,7 @@ def lgr(df, plot=False):
 
 	# Can we grid search these parameters?
 	# (9, 1, 7) -> 0.0455929 RMSE
-	arima_model = ARIMA(train, order=(9, 1, 7))
+	arima_model = ARIMA(train, order=(9, 1, 1))
 	model_fit = arima_model.fit(disp=0)
 	# print(model_fit.summary())
 	pred = model_fit.predict()
@@ -151,7 +152,7 @@ def lgr(df, plot=False):
 		fig, ax = plt.subplots(1,1,figsize=(20,10))
 
 		ax.plot(lgr_df['date'].values, lgr_df['lgr'].values, 'k-', label='True LGR')
-		ax.plot(lgr_df['date'].values[:-10], pred, 'r-', label='Predicted LGR')
+		ax.plot(lgr_df['date'].values[1:-10], pred, 'r-', label='Predicted LGR')
 		# ax.plot(lgr_df['date'].values, lgr_df['lgr'].values, 'k-', label='True LGR')
 		# ax.plot(lgr_df['date'].values, pred, 'b-', label='Predicted LGR')
 
@@ -172,10 +173,11 @@ if __name__ == '__main__':
 	df = prod_query()
 
 	# Try limiting on a single variable
-	# lim_df = iqr_outlier(df)
+	lim_df = iqr_outlier(df)
+	lgr(lim_df, plot=True)
 
-	for well in df['WellFlac'].unique()[:20]:
-		lgr(df[df['WellFlac'] == well], plot=True)
+	# for well in df['WellFlac'].unique()[:20]:
+	# 	lgr(df[df['WellFlac'] == well], plot=True)
 	# arima_params(df[['DateKey', 'lgr']].values)
 	# prod_plot(df)
 
