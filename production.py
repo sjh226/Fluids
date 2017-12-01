@@ -105,7 +105,7 @@ def prod_plot(df):
 
 def iqr_outlier(df):
 	df_out = df
-	for value in ['Oil']:
+	for value in ['Gas']:
 		median = np.median(df_out[value])
 		iqr_25_50 = stats.iqr(df_out[value], rng=(25, 50))
 		iqr_50_75 = stats.iqr(df_out[value], rng=(50, 75))
@@ -145,13 +145,15 @@ def lgr(df, plot=False):
 	print(np.sqrt(error), '\n')
 	print('R^2 of forecast\n---------------')
 	print(r_2)
+
+	print(np.mean(pred))
 	# print(ARIMA.score(model_fit))
 
 	if plot == True:
 		plt.close()
 		fig, ax = plt.subplots(1,1,figsize=(20,10))
 
-		ax.plot(lgr_df['date'].values, lgr_df['lgr'].values, 'k-', label='True LGR')
+		ax.plot(lgr_df['date'].values, lgr_df['Oil'].values, 'k-', label='True LGR')
 		ax.plot(lgr_df['date'].values[1:-10], pred, 'r-', label='Predicted LGR')
 		# ax.plot(lgr_df['date'].values, lgr_df['lgr'].values, 'k-', label='True LGR')
 		# ax.plot(lgr_df['date'].values, pred, 'b-', label='Predicted LGR')
