@@ -97,6 +97,42 @@ def gwr_pull():
     	df = None
     	print('Dataframe is empty')
 
+    new_df = df[['TAG_PREFIX', 'CalcDate']]
+    new_df = new_df.groupby(['TAG_PREFIX', 'CalcDate'], as_index=False).sum()
+
+    return new_df
+
+    def water(row):
+        wat = df[(df['TAG_PREFIX'] == row['TAG_PREFIX']) & (df['CalcDate'] == row['CalcDate'])\
+                 & (df['TANK_TYPE'] == 'WAT')]['TANKLVL'].values
+        try:
+            val = wat[0]
+        except:
+            val = np.nan
+        return val
+
+    def cond(row):
+        cond = df[(df['TAG_PREFIX'] == row['TAG_PREFIX']) & (df['CalcDate'] == row['CalcDate'])\
+                 & (df['TANK_TYPE'] == 'CND')]['TANKLVL'].values
+        try:
+            val = cond[0]
+        except:
+            val = np.nan
+        return val
+
+    def total(row):
+        tot = df[(df['TAG_PREFIX'] == row['TAG_PREFIX']) & (df['CalcDate'] == row['CalcDate'])\
+                 & (df['TANK_TYPE'] == 'TOT')]['TANKLVL'].values
+        try:
+            val = tot[0]
+        except:
+            val = np.nan
+        return val
+
+    new_df['water'] = new_df.apply(water, axis=1)
+    new_df['oil'] = new_df.apply(cond, axis=1)
+    new_df['total'] = new_df.apply(total, axis=1)
+
     return df.drop_duplicates()
 
 def plot_neg(df):
