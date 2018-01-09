@@ -131,8 +131,8 @@ def gwr_pull():
     new_df['water'] = new_df.apply(water, axis=1)
     new_df['oil'] = new_df.apply(cond, axis=1)
     new_df['total'] = new_df.apply(total, axis=1)
-    new_df[new_df['oil'].isnull()]['oil'] = new_df[new_df['oil'].isnull()]['total'] - \
-                                             new_df[new_df['oil'].isnull()]['water']
+    new_df.loc[new_df['oil'].isnull(), 'oil'] = new_df[new_df['oil'].isnull()]['total'] - \
+                                                new_df[new_df['oil'].isnull()]['water']
 
     return new_df.drop_duplicates()
 
