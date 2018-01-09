@@ -100,7 +100,6 @@ def gwr_pull():
     new_df = df[['TAG_PREFIX', 'CalcDate', 'TANKLVL']]
     new_df = new_df.groupby(['TAG_PREFIX', 'CalcDate'], as_index=False).sum()
 
-
     def water(row):
         wat = df[(df['TAG_PREFIX'] == row['TAG_PREFIX']) & (df['CalcDate'] == row['CalcDate'])\
                  & (df['TANK_TYPE'] == 'WAT')]['TANKLVL'].values
@@ -132,7 +131,7 @@ def gwr_pull():
     new_df['oil'] = new_df.apply(cond, axis=1)
     new_df['total'] = new_df.apply(total, axis=1)
 
-    return df.drop_duplicates()
+    return new_df.drop_duplicates()
 
 def plot_neg(df):
     plt.close()
