@@ -83,7 +83,9 @@ def gwr_pull():
         	FROM [TeamOptimizationEngineering].[Reporting].[PI_Tanks]
         	GROUP BY TAG_PREFIX, DAY(CalcDate), MONTH(CalcDate), YEAR(CalcDate)) AS MD
         ON	MD.TAG_PREFIX = PIT.TAG_PREFIX
-        AND	MD.maxtime = PIT.CalcDate;
+        AND	MD.maxtime = PIT.CalcDate
+        JOIN [TeamOptimizationEngineering].[Reporting].[PITag_Dict] AS PTD
+	        ON PTD.API = DW.API;
     """)
 
     cursor.execute(SQLCommand)
@@ -141,5 +143,5 @@ def plot_neg(df):
 
 
 if __name__ == '__main__':
-    # df = lgr_pull()
-    df = gwr_pull()
+    df_lgr = lgr_pull()
+    df_gwr = gwr_pull()
