@@ -239,12 +239,12 @@ if __name__ == '__main__':
     df_lgr = pd.read_csv('data/lgr.csv')
     # df_gwr = pd.read_csv('data/gwr.csv')
 
-    # plot_lgr(df_lgr[(df_lgr['LGROil'] <= df_lgr['FacilityCapacity']) & \
-    #                 (df_lgr['LGROil'] > 0)], variable='oil', plot_type='hist')
+    plot_lgr(df_lgr[(df_lgr['LGROil'] <= df_lgr['FacilityCapacity']) & \
+                    (df_lgr['LGROil'] > 0)], variable='oil', plot_type='hist')
     # plot_lgr(df_lgr[(df_lgr['LGROil'] > df_lgr['FacilityCapacity']) & \
     #                 (df_lgr['LGROil'] < 1000)], variable='oil', plot_type='hist')
 
-    lgr_over(df_lgr[df_lgr['LGROil'] > df_lgr['FacilityCapacity']])
+    # lgr_over(df_lgr[df_lgr['LGROil'] > df_lgr['FacilityCapacity']])
 
     # df = data_link(df_lgr, df_gwr)
     # df.to_csv('data/linked_df.csv')
