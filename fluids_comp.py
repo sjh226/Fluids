@@ -58,6 +58,8 @@ def lgr_pull():
     	df = None
     	print('Dataframe is empty')
 
+    df['CalcDate'] = pd.DatetimeIndex(df['CalcDate']).normalize()
+
     return df.drop_duplicates()
 
 def gwr_pull():
@@ -74,6 +76,7 @@ def gwr_pull():
     cursor = connection.cursor()
     SQLCommand = ("""
         SELECT	PIT.TAG_PREFIX
+                ,API
         		,TANK_TYPE
         		,TANKLVL
         		,CalcDate
@@ -85,7 +88,7 @@ def gwr_pull():
         ON	MD.TAG_PREFIX = PIT.TAG_PREFIX
         AND	MD.maxtime = PIT.CalcDate
         JOIN [TeamOptimizationEngineering].[Reporting].[PITag_Dict] AS PTD
-	        ON PTD.API = DW.API;
+	        ON PTD.TAG = PIT.TAG_PREFIX;
     """)
 
     cursor.execute(SQLCommand)
@@ -100,8 +103,8 @@ def gwr_pull():
     	df = None
     	print('Dataframe is empty')
 
-    new_df = df[['TAG_PREFIX', 'CalcDate', 'TANKLVL']]
-    new_df = new_df.groupby(['TAG_PREFIX', 'CalcDate'], as_index=False).sum()
+    new_df = df[['TAG_PREFIX', 'API', 'CalcDate', 'TANKLVL']]
+    new_df = new_df.groupby(['TAG_PREFIX', 'API', 'CalcDate'], as_index=False).sum()
 
     def water(row):
         wat = df[(df['TAG_PREFIX'] == row['TAG_PREFIX']) & (df['CalcDate'] == row['CalcDate'])\
@@ -136,12 +139,50 @@ def gwr_pull():
     new_df.loc[new_df['oil'].isnull(), 'oil'] = new_df[new_df['oil'].isnull()]['total'] - \
                                                 new_df[new_df['oil'].isnull()]['water']
 
+    new_df['CalcDate'] = pd.DatetimeIndex(new_df['CalcDate']).normalize()
+
     return new_df.drop_duplicates()
 
-def plot_neg(df):
+def data_link(lgr, gwr):
+    return lgr.merge(gwr, how='outer', on=['API', 'CalcDate'])
+
+def plot_lgr(df, variable='oil', plot_type='hist'):
     plt.close()
+    fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+
+    var = 'LGR' + variable.title()
+
+    ob_date = {}
+    for date in df['CalcDate'].unique():
+        ob_date[date] = df[df['CalcDate'] == date][var].mean()
+
+    if plot_type == 'hist':
+        plt.hist(df[var], bins=100, density=True)
+        plt.title('LGR Within Facility Capacity')
+        plt.xlabel('LGR Oil Value')
+        plt.ylabel('Percent of Total')
+        variable = 'oilinrange'
+    elif plot_type == 'box':
+        ax.boxplot([df['LGROil'], df['LGROil']])
+        labels = ['Oil', 'Water']
+        ax.set_xticklabels(labels)
+
+    plt.savefig('images/lgr_{}_{}'.format(plot_type, variable))
 
 
 if __name__ == '__main__':
-    df_lgr = lgr_pull()
-    df_gwr = gwr_pull()
+    # df_lgr = lgr_pull()
+    # df_gwr = gwr_pull()
+    # df_lgr.to_csv('data/lgr.csv')
+    # df_gwr.to_csv('data/gwr.csv')
+
+    df_lgr = pd.read_csv('data/lgr.csv')
+    df_gwr = pd.read_csv('data/gwr.csv')
+
+    plot_lgr(df_lgr[(df_lgr['LGROil'] <= df_lgr['FacilityCapacity']) & \
+                    (df_lgr['LGROil'] > 0)], variable='oil', plot_type='hist')
+    # plot_lgr(df_lgr[(df_lgr['LGROil'] > df_lgr['FacilityCapacity']) & \
+    #                 (df_lgr['LGROil'] < 1000)], variable='oil', plot_type='hist')
+
+    # df = data_link(df_lgr, df_gwr)
+    # df.to_csv('data/linked_df.csv')
