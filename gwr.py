@@ -17,266 +17,216 @@ def gwr_pull():
     	sys.exit()
 
     cursor = connection.cursor()
+
     SQLCommand = ("""
+        Set NOCOUNT ON;
+
         DROP TABLE IF EXISTS #TOT_Sites;
         DROP TABLE IF EXISTS #CND_Sites;
         DROP TABLE IF EXISTS #WAT_Sites;
-    """)
 
-    cursor.execute(SQLCommand)
-
-    SQLCommand = ("""
         SELECT [TAG_PREFIX]
-        INTO   [#TOT_Sites]
-        FROM   TeamOptimizationEngineering.Reporting.PI_Tanks AS PT
-        WHERE  [CalcDate] =
-               (SELECT MAX([CalcDate])
-                FROM   [TeamOptimizationEngineering].[Reporting].[PI_Tanks]
-        )
-            AND [Tank_Type] = 'TOT';
-    """)
-
-    cursor.execute(SQLCommand)
-
-    SQLCommand = ("""
-        SELECT [TAG_PREFIX]
-        INTO   [#WAT_Sites]
-        FROM   TeamOptimizationEngineering.Reporting.PI_Tanks AS PT
-        WHERE  [CalcDate] =
-               (SELECT MAX([CalcDate])
-                FROM   [TeamOptimizationEngineering].[Reporting].[PI_Tanks]
-        )
-                AND [Tank_Type] = 'WAT';
-     """)
-
-    cursor.execute(SQLCommand)
-
-    SQLCommand = ("""
-        SELECT [TAG_PREFIX]
-        INTO   [#CND_Sites]
-        FROM   TeamOptimizationEngineering.Reporting.PI_Tanks AS PT
-        WHERE  [CalcDate] =
-               (SELECT MAX([CalcDate])
-                FROM   [TeamOptimizationEngineering].[Reporting].[PI_Tanks]
-        )
-                AND [Tank_Type] = 'CND';
-    """)
-
-    cursor.execute(SQLCommand)
-
-    SQLCommand = ("""
-        DROP TABLE IF EXISTS #FacilityLevels;
-        SELECT ROW_NUMBER() OVER(PARTITION BY [facilityKey],
-                                 [Tank_type] ORDER BY [DateKey] DESC) AS [rk]
-               ,[FacilityKey]
-               ,[W].[API]
-               ,[PT].[TAG_PREFIX]
-               ,[DateKey]
-               ,[TANK_TYPE]
-               ,CASE WHEN [TANK_TYPE] = 'Wat' THEN-1
-                ELSE 1
-                END AS [Tank_Mult]
-               ,[TANKLVL]
-               ,[TANKCNT]
-               ,[CalcDate]
-        INTO [#FacilityLevels]
-        FROM   TeamOptimizationEngineering.Reporting.PI_Tanks AS PT
-        INNER JOIN #TOT_Sites AS TS
-            ON TS.TAg_Prefix = PT.Tag_Prefix
-        INNER JOIN #WAT_Sites AS WS
-            ON WS.TAg_Prefix = PT.Tag_Prefix
-        INNER JOIN TeamOptimizationEngineering.Reporting.PITag_Dict AS PD
-            ON PD.TAG = PT.Tag_Prefix
-            AND Confidence = 100
-        INNER JOIN OperationsDataMart.Dimensions.Wells AS W ON W.API = PD.Api
-        WHERE  [CalcDate] = (
+        INTO [#TOT_Sites]
+        FROM TeamOptimizationEngineering.Reporting.PI_Tanks AS PT
+        WHERE [CalcDate] =
+        (
             SELECT MAX([CalcDate])
-            FROM   [TeamOptimizationEngineering].[Reporting].[PI_Tanks]
+            FROM [TeamOptimizationEngineering].[Reporting].[PI_Tanks]
         )
-            AND [PT].[Tag_Prefix] NOT IN
-               (SELECT *
-                FROM   [#CND_Sites]
-        );
-    """)
+              AND [Tank_Type] = 'TOT';
 
-    cursor.execute(SQLCommand)
+        SELECT [TAG_PREFIX]
+        INTO [#WAT_Sites]
+        FROM TeamOptimizationEngineering.Reporting.PI_Tanks AS PT
+        WHERE [CalcDate] =
+        (
+            SELECT MAX([CalcDate])
+            FROM [TeamOptimizationEngineering].[Reporting].[PI_Tanks]
+        )
+              AND [Tank_Type] = 'WAT';
 
-    SQLCommand = ("""
+        SELECT [TAG_PREFIX]
+        INTO [#CND_Sites]
+        FROM TeamOptimizationEngineering.Reporting.PI_Tanks AS PT
+        WHERE [CalcDate] =
+        (
+            SELECT MAX([CalcDate])
+            FROM [TeamOptimizationEngineering].[Reporting].[PI_Tanks]
+        )
+              AND [Tank_Type] = 'CND';
+
+        DROP TABLE IF EXISTS #FacilityLevels;
+
+        SELECT [FacilityKey],
+               [W].[API],
+               [PT].[TAG_PREFIX],
+               [TANK_TYPE],
+               CASE
+                   WHEN [TANK_TYPE] = 'Wat'
+                   THEN-1
+                   ELSE 1
+               END AS [Tank_Mult],
+               [TANKLVL],
+               [TANKCNT],
+               [CalcDate]
+        INTO [#FacilityLevels]
+        FROM TeamOptimizationEngineering.Reporting.PI_Tanks AS PT
+             JOIN #TOT_Sites AS TS ON TS.TAg_Prefix = PT.Tag_Prefix
+             JOIN #WAT_Sites AS WS ON WS.TAg_Prefix = PT.Tag_Prefix
+             INNER JOIN TeamOptimizationEngineering.Reporting.PITag_Dict AS PD ON PD.TAG = PT.Tag_Prefix
+                                                                                  AND Confidence = 100
+             JOIN OperationsDataMart.Dimensions.Wells AS W ON W.API = PD.Api
+        WHERE [PT].[Tag_Prefix] NOT IN
+        (
+            SELECT *
+            FROM [#CND_Sites]
+        )
+        GROUP BY PT.TAG_PREFIX,
+                 FacilityKey,
+                 W.API,
+                 TANK_TYPE,
+                 TANKLVL,
+                 TANKCNT,
+                 CalcDate;
+
         DROP TABLE IF EXISTS #Final1;
-    """)
 
-    cursor.execute(SQLCommand)
-
-    SQLCommand = ("""
         SELECT DISTINCT
-                 [TL].[Facilitykey],
-                 [F].[FacilityName],
-                 CASE
-                     WHEN SUM([Tank_Mult]) OVER(PARTITION BY [TL].[FacilityKey]) = 0
-                     THEN SUM([Tank_Mult] * [TankLVL]) OVER(PARTITION BY [TL].[FacilityKey])
-                     ELSE NULL
-                 END AS [CND_LVL],
-                 [WAT_LVL],
-                 [TOT_LVL]
+               [TL].[Facilitykey],
+               [F].[FacilityName],
+               CASE
+                   WHEN SUM([Tank_Mult]) OVER(PARTITION BY [TL].[FacilityKey], [TL].CalcDate) = 0
+                   THEN SUM([Tank_Mult] * [TankLVL]) OVER(PARTITION BY [TL].[FacilityKey], [TL].CalcDate)
+                   ELSE NULL
+               END AS [CND_LVL],
+               [WAT_LVL],
+               [TOT_LVL],
+                 TL.CalcDate
         INTO [#Final1]
-        FROM   #FacilityLevels AS TL
-        INNER JOIN OperationsDataMart.Dimensions.Facilities AS F
-            ON f.Facilitykey = TL.Facilitykey
-            AND F.TankCount -1 <= TL.TankCNT
-        LEFT JOIN
-               (SELECT DISTINCT
-                    [TL].[Facilitykey],
-                    CASE
-                           WHEN [TANK_TYPE] = 'TOT'
-                           THEN [TankLVL]
-                           ELSE NULL
-                    END AS [TOT_LVL]
-                FROM   #FacilityLevels AS TL
-                INNER JOIN OperationsDataMart.Dimensions.Facilities AS F
-                    ON f.Facilitykey = TL.Facilitykey
-                    AND F.TankCount -1 <= TL.TankCNT
-                WHERE  [RK] = 1
-                    AND [TANK_TYPE] = 'TOT') AS Tot
-            ON Tot.Facilitykey = TL.Facilitykey
-        LEFT JOIN (
+        FROM #FacilityLevels AS TL
+             JOIN OperationsDataMart.Dimensions.Facilities AS F ON f.Facilitykey = TL.Facilitykey
+                                                                   AND F.TankCount - 1 <= TL.TankCNT
+             LEFT JOIN
+        (
             SELECT DISTINCT
-                [TL].[Facilitykey],
-                CASE
+                   [TL].[Facilitykey],
+                   [TL].[CalcDate],
+                   CASE
+                       WHEN [TANK_TYPE] = 'TOT'
+                       THEN [TankLVL]
+                       ELSE NULL
+                   END AS [TOT_LVL]
+            FROM #FacilityLevels AS TL
+                 JOIN OperationsDataMart.Dimensions.Facilities AS F ON f.Facilitykey = TL.Facilitykey
+                                                                       AND F.TankCount - 1 <= TL.TankCNT
+                                                                       AND [TANK_TYPE] = 'TOT'
+        ) AS Tot ON Tot.Facilitykey = TL.Facilitykey and Tot.CalcDate = TL.CalcDate
+             LEFT JOIN
+        (
+            SELECT DISTINCT
+                   [TL].[Facilitykey],
+                   [TL].[CalcDate],
+                   CASE
                        WHEN [TANK_TYPE] = 'WAT'
                        THEN [TankLVL]
                        ELSE NULL
-                END AS [WAT_LVL]
-            FROM   #FacilityLevels AS TL
-            INNER JOIN OperationsDataMart.Dimensions.Facilities AS F
-                ON f.Facilitykey = TL.Facilitykey
-                AND F.TankCount -1 <= TL.TankCNT
-            WHERE  [RK] = 1
-                AND [TANK_TYPE] = 'WAT') AS WAT
-            ON WAT.Facilitykey = TL.Facilitykey
-        WHERE [RK] = 1;
-    """)
+                   END AS [WAT_LVL]
+            FROM #FacilityLevels AS TL
+                 JOIN OperationsDataMart.Dimensions.Facilities AS F ON f.Facilitykey = TL.Facilitykey
+                                                                       AND F.TankCount - 1 <= TL.TankCNT
+                                                                       AND [TANK_TYPE] = 'WAT'
+        ) AS WAT ON WAT.Facilitykey = TL.Facilitykey and WAT.CalcDate = TL.CalcDate;
 
-    cursor.execute(SQLCommand)
-
-    SQLCommand = ("""
         DROP TABLE IF EXISTS #FacilityLevels2;
-    """)
 
-    cursor.execute(SQLCommand)
-
-    SQLCommand = ("""
-        SELECT ROW_NUMBER() OVER(PARTITION BY [facilityKey],
-                                 [Tank_type] ORDER BY [DateKey] DESC) AS [rk],
-                 [FacilityKey],
-                 [W].[API],
-                 [PT].[TAG_PREFIX],
-                 [DateKey],
-                 [TANK_TYPE],
-                 CASE
-                     WHEN [TANK_TYPE] = 'Wat'
-                     THEN-1
-                     ELSE 1
-                 END AS [Tank_Mult],
-                 [TANKLVL],
-                 [TANKCNT],
-                 [CalcDate]
+        SELECT      [FacilityKey],
+                    [W].[API],
+                    [PT].[TAG_PREFIX],
+                    [TANK_TYPE],
+                    CASE
+                        WHEN [TANK_TYPE] = 'Wat'
+                        THEN-1
+                        ELSE 1
+                    END AS [Tank_Mult],
+                    [TANKLVL],
+                    [TANKCNT],
+                    [CalcDate]
         INTO [#FacilityLevels2]
         FROM   TeamOptimizationEngineering.Reporting.PI_Tanks AS PT
-        INNER JOIN #CND_Sites AS TS ON TS.TAg_Prefix = PT.Tag_Prefix
-        INNER JOIN #WAT_Sites AS WS ON WS.TAg_Prefix = PT.Tag_Prefix
-        INNER JOIN TeamOptimizationEngineering.Reporting.PITag_Dict AS PD
+        JOIN #CND_Sites AS TS ON TS.TAg_Prefix = PT.Tag_Prefix
+        JOIN #WAT_Sites AS WS ON WS.TAg_Prefix = PT.Tag_Prefix
+        JOIN TeamOptimizationEngineering.Reporting.PITag_Dict AS PD
             ON PD.TAG = PT.Tag_Prefix
             AND Confidence = 100
-        INNER JOIN OperationsDataMart.Dimensions.Wells AS W
+        JOIN OperationsDataMart.Dimensions.Wells AS W
             ON W.API = PD.Api
-        WHERE  [CalcDate] =
-               (SELECT MAX([CalcDate])
-                FROM   [TeamOptimizationEngineering].[Reporting].[PI_Tanks]
-                )
-            AND [PT].[Tag_Prefix] NOT IN
-               (SELECT *
-                FROM   [#TOT_Sites]);
-    """)
+        WHERE
+            [PT].[Tag_Prefix] NOT IN
+                (SELECT *
+                FROM   [#TOT_Sites])
+        GROUP BY PT.TAG_PREFIX, FacilityKey, W.API, TANK_TYPE, TANKLVL, TANKCNT, CalcDate;
 
-    cursor.execute(SQLCommand)
-
-    SQLCommand = ("""
         DROP TABLE IF EXISTS #Final2;
-    """)
 
-    cursor.execute(SQLCommand)
-
-    SQLCommand = ("""
         SELECT DISTINCT
-                 [TL].[Facilitykey],
-                 [F].[FacilityName],
-                 [CND_LVL],
-                 [WAT_LVL],
-                 [CND_LVL] + [WAT_LVL] AS [TOT_LVL]
+                    [TL].[Facilitykey],
+                    [F].[FacilityName],
+                    [CND_LVL],
+                    [WAT_LVL],
+                    [CND_LVL] + [WAT_LVL] AS [TOT_LVL],
+            		[TL].[CalcDate]
         INTO [#Final2]
         FROM #FacilityLevels2 AS TL
-        INNER JOIN OperationsDataMart.Dimensions.Facilities AS F
+        JOIN OperationsDataMart.Dimensions.Facilities AS F
             ON f.Facilitykey = TL.Facilitykey
         LEFT JOIN
-           (SELECT DISTINCT
+            (SELECT DISTINCT
                     [TL].[Facilitykey],
-                    SUM(CASE
-                               WHEN [RK] = 1
-                               THEN [TANKCNT]
-                               ELSE 0
-                           END) OVER(PARTITION BY [TL].[Facilitykey]) AS [TANKCNT]
+        			[TL].[CalcDate],
+                    SUM([TANKCNT]) OVER(PARTITION BY [TL].[Facilitykey], [TL].[CalcDate]) AS [TANKCNT]
             FROM   #FacilityLevels2 AS TL) AS CNT
             ON F.Facilitykey = CNT.Facilitykey
                 AND F.TankCount - 1 <= CNT.TANKCNT
+        		AND TL.CalcDate = CNT.CalcDate
         LEFT JOIN
             (SELECT DISTINCT
                 [TL].[Facilitykey],
+        		[TL].[CalcDate],
                 CASE
-                       WHEN [TANK_TYPE] = 'CND'
-                       THEN [TankLVL]
-                       ELSE NULL
+                        WHEN [TANK_TYPE] = 'CND'
+                        THEN [TankLVL]
+                        ELSE NULL
                 END AS [CND_LVL]
             FROM   #FacilityLevels2 AS TL
-            WHERE  [RK] = 1
-                AND [TANK_TYPE] = 'CND') AS Tot
+            WHERE  [TANK_TYPE] = 'CND') AS Tot
             ON Tot.Facilitykey = TL.Facilitykey
+        	AND Tot.CalcDate = TL.CalcDate
         LEFT JOIN
-               (SELECT DISTINCT
+                (SELECT DISTINCT
                         [TL].[Facilitykey],
+        				[TL].[CalcDate],
                         CASE
-                               WHEN [TANK_TYPE] = 'WAT'
-                               THEN [TankLVL]
-                               ELSE NULL
+                                WHEN [TANK_TYPE] = 'WAT'
+                                THEN [TankLVL]
+                                ELSE NULL
                         END AS [WAT_LVL]
-               FROM   #FacilityLevels2 AS TL
-               WHERE  [RK] = 1
-                    AND [TANK_TYPE] = 'WAT') AS WAT
+                FROM   #FacilityLevels2 AS TL
+                WHERE  [TANK_TYPE] = 'WAT') AS WAT
             ON WAT.Facilitykey = TL.Facilitykey
-        WHERE [RK] = 1
+        	AND WAT.CalcDate = TL.CalcDate
         ORDER BY [FacilityName];
-    """)
 
-    cursor.execute(SQLCommand)
-
-    SQLCommand = ("""
         DROP TABLE IF EXISTS #LGRV7;
-    """)
 
-    cursor.execute(SQLCommand)
-
-    SQLCommand = ("""
         SELECT *
         INTO [#LGRV7]
         FROM     #Final1
         UNION ALL
         SELECT *
         FROM   #Final2;
-    """)
 
-    cursor.execute(SQLCommand)
-
-    SQLCommand = ("""
         SELECT * FROM #LGRV7
+        ORDER BY Facilitykey, CalcDate;
     """)
 
     cursor.execute(SQLCommand)
