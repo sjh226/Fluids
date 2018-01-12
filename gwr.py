@@ -258,11 +258,31 @@ def gwr_pull():
 
     df['CalcDate'] = pd.DatetimeIndex(df['CalcDate']).normalize()
 
+    df['CND_rate'] = df['CND_LVL'] - df['CND_LVL'].shift(1)
+    df['WAT_rate'] = df['WAT_LVL'] - df['WAT_LVL'].shift(1)
+    df['TOT_rate'] = df['TOT_LVL'] - df['TOT_LVL'].shift(1)
+
     return df
+
+def off_by_date(df):
+    lim_df = df[(df['TOT_LVL'] > df['FacilityCapacity']) & (df['FacilityCapacity'] != 0)]
+
+    off_vals = []
+    for date in lim_df['CalcDate'].unique():
+        val = np.mean(df[df['CalcDate'] == date]['TOT_LVL'] - \
+                      df[df['CalcDate'] == date]['FacilityCapacity'])
+        off_vals.append(val)
+
+    print('Averaging {} bbl per day.'.format(np.mean(off_vals)))
+
+def plot_rate(df):
+    pass
 
 
 if __name__ == '__main__':
-    # df = gwr_pull()
-    # df.to_csv('data/full_gwr.csv')
+    df = gwr_pull()
+    df.to_csv('data/full_gwr.csv')
 
-    df = pd.read_csv('data/full_gwr.csv')
+    # df = pd.read_csv('data/full_gwr.csv')
+
+    # off_by_date(df)
