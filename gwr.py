@@ -231,6 +231,7 @@ def gwr_pull():
                 ,LGR.CND_LVL
                 ,LGR.WAT_LVL
                 ,LGR.TOT_LVL
+                ,DF.FacilityCapacity
         FROM #LGRV7 AS LGR
         JOIN (SELECT	Facilitykey
         				,MAX(CalcDate) maxtime
@@ -238,6 +239,8 @@ def gwr_pull():
         		GROUP BY Facilitykey, DAY(CalcDate), MONTH(CalcDate), YEAR(CalcDate)) AS MD
         	ON	MD.Facilitykey = LGR.Facilitykey
         	AND	MD.maxtime = LGR.CalcDate
+        JOIN [TeamOptimizationEngineering].[dbo].[DimensionsFacilities] AS DF
+            ON DF.Facilitykey = LGR.Facilitykey
         ORDER BY LGR.Facilitykey, LGR.CalcDate;
     """)
 
@@ -259,4 +262,7 @@ def gwr_pull():
 
 
 if __name__ == '__main__':
-    df = gwr_pull()
+    # df = gwr_pull()
+    # df.to_csv('data/full_gwr.csv')
+
+    df = pd.read_csv('data/full_gwr.csv')
