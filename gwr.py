@@ -225,8 +225,20 @@ def gwr_pull():
         SELECT *
         FROM   #Final2;
 
-        SELECT * FROM #LGRV7
-        ORDER BY Facilitykey, CalcDate;
+        SELECT  LGR.FacilityKey
+                ,LGR.FacilityName
+                ,LGR.CalcDate
+                ,LGR.CND_LVL
+                ,LGR.WAT_LVL
+                ,LGR.TOT_LVL
+        FROM #LGRV7 AS LGR
+        JOIN (SELECT	Facilitykey
+        				,MAX(CalcDate) maxtime
+        		FROM #LGRV7
+        		GROUP BY Facilitykey, DAY(CalcDate), MONTH(CalcDate), YEAR(CalcDate)) AS MD
+        	ON	MD.Facilitykey = LGR.Facilitykey
+        	AND	MD.maxtime = LGR.CalcDate
+        ORDER BY LGR.Facilitykey, LGR.CalcDate;
     """)
 
     cursor.execute(SQLCommand)
@@ -241,7 +253,9 @@ def gwr_pull():
     	df = None
     	print('Dataframe is empty')
 
-    return df.drop_duplicates()
+    df['CalcDate'] = pd.DatetimeIndex(df['CalcDate']).normalize()
+
+    return df
 
 
 if __name__ == '__main__':
