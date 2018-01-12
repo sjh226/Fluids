@@ -281,14 +281,14 @@ def plot_rate(df):
 
     facility = df['FacilityKey'].unique()[0]
 
-    ax.plot(df['CalcDate'], df['CND_rate'])
+    ax.plot(df['CalcDate'], df['TOT_rate'])
 
-    plt.title('Cond Rates for Facility {}'.format(facility))
+    plt.title('Liquid Rates for Facility {}'.format(facility))
     plt.xlabel('Date')
     plt.ylabel('bbl/day')
     plt.xticks(rotation='vertical')
 
-    plt.savefig('images/rates/cond_rate_{}.png'.format(facility))
+    plt.savefig('images/rates/total/tot_rate_{}.png'.format(facility))
 
 
 if __name__ == '__main__':
