@@ -276,13 +276,28 @@ def off_by_date(df):
     print('Averaging {} bbl per day.'.format(np.mean(off_vals)))
 
 def plot_rate(df):
-    pass
+    plt.close()
+    fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+
+    facility = df['FacilityKey'].unique()[0]
+
+    ax.plot(df['CalcDate'], df['CND_rate'])
+
+    plt.title('Cond Rates for Facility {}'.format(facility))
+    plt.xlabel('Date')
+    plt.ylabel('bbl/day')
+    plt.xticks(rotation='vertical')
+
+    plt.savefig('images/rates/cond_rate_{}.png'.format(facility))
 
 
 if __name__ == '__main__':
-    df = gwr_pull()
-    df.to_csv('data/full_gwr.csv')
+    # df = gwr_pull()
+    # df.to_csv('data/full_gwr.csv')
 
-    # df = pd.read_csv('data/full_gwr.csv')
+    df = pd.read_csv('data/full_gwr.csv')
 
     # off_by_date(df)
+
+    for facility in df['FacilityKey'].unique():
+        plot_rate(df[df['FacilityKey'] == facility])
