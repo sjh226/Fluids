@@ -240,9 +240,10 @@ def gauge_pull():
         SET NOCOUNT ON;
         DROP TABLE IF EXISTS #Tanks
 
-        SELECT	T.Facilitykey
+        SELECT	F.Facilitykey
         		,GD.tankCode
         		,GD.gaugeDate
+                ,F.FacilityCapacity
         		,((GD.liquidGaugeFeet + (GD.liquidGaugeInches / 12) + (GD.liquidGaugeQuarter / 48))
                  - (GD.waterGaugeFeet + (GD.waterGaugeInches / 12) + (GD.waterGaugeQuarter / 48))) * 20 AS oil
         		,(GD.waterGaugeFeet + (GD.waterGaugeInches / 12) + (GD.waterGaugeQuarter / 48)) * 20 AS water
@@ -250,15 +251,18 @@ def gauge_pull():
         FROM EDW.Enbase.GaugeData AS GD
         JOIN OperationsDataMart.Dimensions.Tanks AS T
         	ON T.TankCode = GD.tankCode
+        JOIN OperationsDataMart.Dimensions.Facilities AS F
+            ON F.Facilitykey = T.Facilitykey
         ORDER BY T.Facilitykey, GD.gaugeDate;
 
         SELECT	Facilitykey
         		,CAST(gaugeDate AS DATE) AS gaugeDate
+                ,FacilityCapacity
         		,SUM(oil) AS total_oil
         		,SUM(water) AS total_water
         FROM #Tanks
         WHERE oil IS NOT NULL
-        GROUP BY Facilitykey, CAST(gaugeDate AS DATE)
+        GROUP BY Facilitykey, FacilityCapacity, CAST(gaugeDate AS DATE)
         ORDER BY Facilitykey, CAST(gaugeDate AS DATE);
     """)
 
@@ -313,7 +317,10 @@ def lgr_gauge_plot(lgr_df, gauge_df):
     g_df = gauge_df[(gauge_df['gaugeDate'] >= date_min) & (gauge_df['gaugeDate'] <= date_max)]
     # g_df = gauge_df
 
-    capacity = lgr_df['FacilityCapacity'].unique()[0]
+    try:
+        capacity = gauge_df['FacilityCapacity'].unique()[0]
+    except:
+        capacity = 0
     version = lgr_df['PredictionMethod'].unique()[0]
 
     ax.plot(lgr_df['CalcDate'], lgr_df['LGROil'], label='LGR Value')
