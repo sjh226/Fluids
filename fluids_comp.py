@@ -18,24 +18,24 @@ def lgr_pull():
 
     cursor = connection.cursor()
     SQLCommand = ("""
-        SELECT DW.API
-        	  ,DW.WellName
-              ,LGR.TotalOilOnSite AS LGROil
-              ,LGR.TotalWaterOnSite AS LGRWater
-              ,LGR.FacilityCapacity
-              ,LGR.CalcDate
-              ,LGR.PredictionMethod
-        FROM [TeamOptimizationEngineering].[dbo].[InventoryAll] AS LGR
+        SELECT  LGR.FacilityKey
+                ,SUM(LGR.TotalOilOnSite) AS LGROil
+                ,SUM(LGR.TotalWaterOnSite) AS LGRWater
+                ,LGR.FacilityCapacity
+                ,LGR.CalcDate
+                ,LGR.PredictionMethod
+        FROM [TeamOptimizationEngineering].[dbo].[Inventory] AS LGR
         JOIN (SELECT	FacilityKey
         				,MAX(CalcDate) maxtime
-        		FROM [TeamOptimizationEngineering].[dbo].[InventoryAll]
+        		FROM [TeamOptimizationEngineering].[dbo].[Inventory]
         		GROUP BY FacilityKey, DAY(CalcDate), MONTH(CalcDate), YEAR(CalcDate)) AS MD
         	ON	MD.FacilityKey = LGR.FacilityKey
         	AND	MD.maxtime = LGR.CalcDate
         JOIN [TeamOptimizationEngineering].[dbo].[DimensionsWells] AS DW
         	ON LGR.FacilityKey = DW.FacilityKey
         JOIN [TeamOptimizationEngineering].[Reporting].[PITag_Dict] AS PTD
-        	ON PTD.API = DW.API;
+        	ON PTD.API = DW.API
+        GROUP BY LGR.FacilityKey, LGR.FacilityCapacity, LGR.CalcDate, LGR.PredictionMethod;
     """)
 
     # WHERE	LGR.FacilityKey IN (
@@ -59,9 +59,51 @@ def lgr_pull():
     	df = None
     	print('Dataframe is empty')
 
-    df['CalcDate'] = pd.DatetimeIndex(df['CalcDate']).normalize()
+    df['CalcDate'] = pd.to_datetime(pd.DatetimeIndex(df['CalcDate']).normalize())
 
     return df.drop_duplicates()
+
+def bad_gauge_pull():
+    try:
+        connection = pyodbc.connect(r'Driver={SQL Server Native Client 11.0};'
+                                    r'Server=SQLDW-L48.BP.Com;'
+                                    r'Database=OperationsDataMart;'
+                                    r'trusted_connection=yes'
+                                    )
+    except pyodbc.Error:
+    	print("Connection Error")
+    	sys.exit()
+
+    cursor = connection.cursor()
+    SQLCommand = ("""
+        SELECT  TD.TankID
+                ,T.Facilitykey
+                ,TD.BusinessUnit
+                ,TD.DateKey
+                ,TD.DateTime
+                ,TD.RecordType
+                ,TD.CloseOil
+                ,TD.CloseWater
+                ,TD.CreatedDate
+        FROM [OperationsDataMart].[Stage].[TankDispositions] AS TD
+        JOIN [OperationsDataMart].[Dimensions].[Tanks] AS T
+	       ON T.TankID =  TD.TankID
+        WHERE TD.BusinessUnit = 'North';
+    """)
+
+    cursor.execute(SQLCommand)
+    results = cursor.fetchall()
+
+    df = pd.DataFrame.from_records(results)
+    connection.close()
+
+    try:
+    	df.columns = pd.DataFrame(np.matrix(cursor.description))[0]
+    except:
+    	df = None
+    	print('Dataframe is empty')
+
+    return df
 
 def gwr_pull():
     try:
@@ -182,6 +224,64 @@ def ticket_pull():
     	df = None
     	print('Dataframe is empty')
 
+def gauge_pull():
+    try:
+        connection = pyodbc.connect(r'Driver={SQL Server Native Client 11.0};'
+                                    r'Server=SQLDW-L48.BP.Com;'
+                                    r'Database=EDW;'
+                                    r'trusted_connection=yes'
+                                    )
+    except pyodbc.Error:
+    	print("Connection Error")
+    	sys.exit()
+
+    cursor = connection.cursor()
+    SQLCommand = ("""
+        SET NOCOUNT ON;
+        DROP TABLE IF EXISTS #Tanks
+
+        SELECT	F.Facilitykey
+        		,GD.tankCode
+        		,GD.gaugeDate
+                ,F.FacilityCapacity
+        		,((GD.liquidGaugeFeet + (GD.liquidGaugeInches / 12) + (GD.liquidGaugeQuarter / 48))
+                 - (GD.waterGaugeFeet + (GD.waterGaugeInches / 12) + (GD.waterGaugeQuarter / 48))) * 20 AS oil
+        		,(GD.waterGaugeFeet + (GD.waterGaugeInches / 12) + (GD.waterGaugeQuarter / 48)) * 20 AS water
+        INTO #Tanks
+        FROM EDW.Enbase.GaugeData AS GD
+        JOIN OperationsDataMart.Dimensions.Tanks AS T
+        	ON T.TankCode = GD.tankCode
+        JOIN OperationsDataMart.Dimensions.Facilities AS F
+            ON F.Facilitykey = T.Facilitykey
+        ORDER BY T.Facilitykey, GD.gaugeDate;
+
+        SELECT	Facilitykey
+        		,CAST(gaugeDate AS DATE) AS gaugeDate
+                ,FacilityCapacity
+        		,SUM(oil) AS total_oil
+        		,SUM(water) AS total_water
+        FROM #Tanks
+        WHERE oil IS NOT NULL
+        GROUP BY Facilitykey, FacilityCapacity, CAST(gaugeDate AS DATE)
+        ORDER BY Facilitykey, CAST(gaugeDate AS DATE);
+    """)
+
+    cursor.execute(SQLCommand)
+    results = cursor.fetchall()
+
+    df = pd.DataFrame.from_records(results)
+    connection.close()
+
+    try:
+    	df.columns = pd.DataFrame(np.matrix(cursor.description))[0]
+    except:
+    	df = None
+    	print('Dataframe is empty')
+
+    df['gaugeDate'] = pd.DatetimeIndex(df['gaugeDate']).normalize()
+
+    return df
+
 def data_link(lgr, gwr):
     return lgr.merge(gwr, how='outer', on=['API', 'CalcDate'])
 
@@ -208,6 +308,50 @@ def plot_lgr(df, variable='oil', plot_type='hist'):
 
     plt.savefig('images/lgr_{}_{}.png'.format(plot_type, variable))
 
+def lgr_gauge_plot(lgr_df, gauge_df):
+    plt.close()
+    fig, ax = plt.subplots(1, 1, figsize=(12, 10))
+
+    date_min = lgr_df['CalcDate'].min()
+    date_max = lgr_df['CalcDate'].max()
+    g_df = gauge_df[(gauge_df['gaugeDate'] >= date_min) & (gauge_df['gaugeDate'] <= date_max)]
+    # g_df = gauge_df
+
+    try:
+        capacity = gauge_df['FacilityCapacity'].unique()[0]
+    except:
+        capacity = 0
+    version = lgr_df['PredictionMethod'].unique()[0]
+
+    ax.plot(lgr_df['CalcDate'], lgr_df['LGROil'], label='LGR Value')
+    ax.plot(g_df['gaugeDate'], g_df['total_oil'], 'ro', label='Real Gauges')
+    ax.axhline(capacity, date_min, date_max, linestyle='--', color='#920f25', label='Facility Capacity')
+    ymin, ymax = plt.ylim()
+
+    facility = lgr_df['FacilityKey'].unique()[0]
+    plt.title('LGR for Facility {}'.format(facility))
+    ax.set_xlabel('Date')
+    ax.set_ylabel('bbl Oil')
+    plt.ylim(ymin=0)
+    plt.ylim(ymax=ymax + (ymax * .3))
+
+    ymin, ymax = plt.ylim()
+    ax.text(date_min, ymax - (ymax * .1), version, fontsize=18)
+
+    cnt = 0
+    if len(ax.xaxis.get_ticklabels()) > 12:
+        for label in ax.xaxis.get_ticklabels():
+            if cnt % 3 == 0:
+                label.set_visible(True)
+            else:
+                label.set_visible(False)
+            cnt += 1
+
+    plt.xticks(rotation='vertical')
+    plt.legend()
+
+    plt.savefig('images/lgr/lgr_gauge_{}.png'.format(facility))
+
 def lgr_over(df):
     plt.close()
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
@@ -233,14 +377,24 @@ def lgr_over(df):
 if __name__ == '__main__':
     # df_lgr = lgr_pull()
     # df_gwr = gwr_pull()
+    # gauge_df = gauge_pull()
+
     # df_lgr.to_csv('data/lgr.csv')
     # df_gwr.to_csv('data/gwr.csv')
+    # gauge_df.to_csv('data/gauges.csv')
 
     df_lgr = pd.read_csv('data/lgr.csv')
     # df_gwr = pd.read_csv('data/gwr.csv')
+    gauge_df = pd.read_csv('data/gauges.csv')
 
-    plot_lgr(df_lgr[(df_lgr['LGROil'] <= df_lgr['FacilityCapacity']) & \
-                    (df_lgr['LGROil'] > 0)], variable='oil', plot_type='hist')
+    for facility in sorted(df_lgr['FacilityKey'].unique()):
+        lgr_gauge_plot(df_lgr[df_lgr['FacilityKey'] == facility].sort_values('CalcDate'), \
+                       gauge_df[gauge_df['Facilitykey'] == facility].sort_values('gaugeDate'))
+        # break
+
+    # plot_lgr(df_lgr[(df_lgr['LGROil'] <= df_lgr['FacilityCapacity']) & \
+    #                 (df_lgr['LGROil'] > 0)], variable='oil', plot_type='hist',\
+    #                 gauge=gauge_df)
     # plot_lgr(df_lgr[(df_lgr['LGROil'] > df_lgr['FacilityCapacity']) & \
     #                 (df_lgr['LGROil'] < 1000)], variable='oil', plot_type='hist')
 
