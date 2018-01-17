@@ -19,8 +19,8 @@ def lgr_pull():
     cursor = connection.cursor()
     SQLCommand = ("""
         SELECT  LGR.FacilityKey
-                ,SUM(LGR.TotalOilOnSite) AS LGROil
-                ,SUM(LGR.TotalWaterOnSite) AS LGRWater
+                ,AVG(LGR.TotalOilOnSite) AS LGROil
+                ,AVG(LGR.TotalWaterOnSite) AS LGRWater
                 ,LGR.FacilityCapacity
                 ,LGR.CalcDate
                 ,LGR.PredictionMethod
