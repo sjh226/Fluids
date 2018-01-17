@@ -7,15 +7,29 @@ def data_conn():
     connection = cx_Oracle.connect("REPORTING", "REPORTING", "L48APPSP1.WORLD")
 
     cursor = connection.cursor()
-    cursor.execute("""
-            SELECT first_name, last_name
-            FROM employees
-            WHERE department_id = :did AND employee_id > :eid""",
-            did = 50,
-            eid = 190)
-    for fname, lname in cursor:
-        print("Values:", fname, lname)
+    query = ("""
+        SELECT  TAG_PREFIX
+                ,TIME
+                ,CTS_VC
+        FROM DATA_QUALITY.PI_WAM_ALL_WELLS_OPS
+        WHERE CTS_VC IS NOT NULL
+        ORDER BY TAG_PREFIX, TIME;
+    """)
+
+    cursor.execute(query)
+    results = cursor.fetchall()
+
+    df = pd.DataFrame.from_records(results)
+    connection.close()
+
+    try:
+    	df.columns = pd.DataFrame(np.matrix(cursor.description))[0]
+    except:
+    	df = None
+    	print('Dataframe is empty')
+
+    return df
 
 
 if __name__ == "__main__":
-    data_conn()
+    df = data_conn()
