@@ -3,6 +3,7 @@ import numpy as np
 import pyodbc
 import matplotlib.pyplot as plt
 import sys
+import cx_Oracle
 
 
 def gwr_pull():
@@ -264,6 +265,333 @@ def gwr_pull():
 
     return df
 
+def oracle_pull():
+    connection = cx_Oracle.connect("REPORTING", "REPORTING", "L48APPSP1.WORLD")
+
+    cursor = connection.cursor()
+    query = '''
+        SELECT
+            TAG_PREFIX,
+            TIME,
+            Tank_Type,
+            TankVol,
+            TankCnt
+
+        FROM (
+                 SELECT
+                     row_number()
+                     OVER (
+                         PARTITION BY TAG_PREFIX
+                         ORDER BY Time DESC ) AS rk,
+                     TAG_PREFIX,
+                     TIME,
+                     (nvl(TNK_1_TOT_LVL, 0) + nvl(TNK_2_TOT_LVL, 0) + nvl(TNK_3_TOT_LVL, 0) + nvl(TNK_4_TOT_LVL, 0) +
+                      nvl(TNK_5_TOT_LVL, 0) + nvl(TNK_6_TOT_LVL, 0) +
+                      nvl(TNK_7_TOT_LVL, 0) + nvl(TNK_8_TOT_LVL, 0) + nvl(TNK_9_TOT_LVL, 0) + nvl(TNK_10_TOT_LVL, 0)) *
+                     20                       AS TankVol,
+                     GAS_VC,
+                     CASE WHEN (TNK_1_TOT_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_2_TOT_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_3_TOT_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_4_TOT_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_5_TOT_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_6_TOT_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_7_TOT_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_8_TOT_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_9_TOT_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_10_TOT_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END               AS TankCnt,
+                     'TOT'                    AS Tank_Type
+                 FROM DATA_QUALITY.PI_WAM_ALL_WELLS_OPS
+             --Where TIME >= trunc(sysdate-2)
+             ) Vol
+        WHERE Vol.TankVol > 0
+              --AND TIME >= trunc(sysdate)
+              --AND rk = 1
+
+        UNION ALL
+
+        SELECT
+            TAG_PREFIX,
+            TIME,
+            Tank_Type,
+            TankVol,
+            TankCnt
+
+        FROM (
+                 SELECT
+                     row_number()
+                     OVER (
+                     PARTITION BY TAG_PREFIX
+                         ORDER BY Time DESC ) AS rk,
+                     TAG_PREFIX,
+                     TIME,
+                     (nvl(TNK_1_WAT_LVL, 0) +
+                      nvl(TNK_2_WAT_LVL, 0) +
+                      nvl(TNK_3_WAT_LVL, 0) +
+                      nvl(TNK_4_WAT_LVL, 0) +
+                      nvl(TNK_WAT_1_LVL, 0) +
+                      nvl(TNK_WAT_10_LVL, 0) +
+                      nvl(TNK_WAT_11_LVL, 0) +
+                      nvl(TNK_WAT_2_LVL, 0) +
+                      nvl(TNK_WAT_3_LVL, 0) +
+                      nvl(TNK_WAT_305A_LVL, 0) +
+                      nvl(TNK_WAT_305B_LVL, 0) +
+                      nvl(TNK_WAT_305C_LVL, 0) +
+                      nvl(TNK_WAT_305D_LVL, 0) +
+                      nvl(TNK_WAT_305E_LVL, 0) +
+                      nvl(TNK_WAT_310A_LVL, 0) +
+                      nvl(TNK_WAT_310B_LVL, 0) +
+                      nvl(TNK_WAT_310C_LVL, 0) +
+                     nvl(TNK_WAT_310D_LVL, 0) +
+                      nvl(TNK_WAT_4_LVL, 0) +
+                      nvl(TNK_WAT_6_LVL, 0) +
+                      nvl(TNK_WAT_A_LVL, 0) +
+                      nvl(TNK_WAT_B_LVL, 0) +
+                      nvl(TNK_WAT_C_LVL, 0) +
+                      nvl(TNK_WAT_D_LVL, 0)) *
+                     20                       AS TankVol,
+                     GAS_VC,
+                     CASE WHEN (TNK_1_WAT_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_2_WAT_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_3_WAT_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_4_WAT_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_WAT_1_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_WAT_10_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_WAT_11_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_WAT_2_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_WAT_3_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_WAT_305A_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_WAT_305B_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_WAT_305C_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_WAT_305D_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_WAT_305E_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_WAT_310A_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_WAT_310B_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_WAT_310C_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_WAT_310D_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_WAT_4_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_WAT_6_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_WAT_A_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_WAT_B_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_WAT_c_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_WAT_d_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END               AS TankCnt,
+                     'WAT'                    AS Tank_Type
+                 FROM DATA_QUALITY.PI_WAM_ALL_WELLS_OPS
+                 --WHERE TIME >= trunc(sysdate - 2)
+             ) Vol
+        WHERE Vol.TankVol > 0
+              --AND TIME >= trunc(sysdate)
+              --AND rk = 1
+
+        UNION ALL
+
+        SELECT
+            TAG_PREFIX,
+            TIME,
+            Tank_Type,
+            TankVol,
+            TankCnt
+
+        FROM (
+                 SELECT
+                     row_number()
+                     OVER (
+                         PARTITION BY TAG_PREFIX
+                        ORDER BY Time DESC ) AS rk,
+                     TAG_PREFIX,
+                     TIME,
+                     (nvl(TNK_CND_1_LVL, 0) +
+                      nvl(TNK_CND_2_LVL, 0) +
+                      nvl(TNK_CND_3_LVL, 0) +
+                      nvl(TNK_CND_305A_LVL, 0) +
+                      nvl(TNK_CND_305B_LVL, 0) +
+                      nvl(TNK_CND_305C_LVL, 0) +
+                      nvl(TNK_CND_305D_LVL, 0) +
+                      nvl(TNK_CND_305E_LVL, 0) +
+                      nvl(TNK_CND_305F_LVL, 0) +
+                      nvl(TNK_CND_310A_LVL, 0) +
+                      nvl(TNK_CND_310B_LVL, 0) +
+                      nvl(TNK_CND_310C_LVL, 0) +
+                      nvl(TNK_CND_310D_LVL, 0) +
+                      nvl(TNK_CND_311_LVL, 0) +
+                      nvl(TNK_CND_4_LVL, 0) +
+                      nvl(TNK_CND_5_LVL, 0) +
+                      nvl(TNK_CND_6_LVL, 0) +
+                      nvl(TNK_CND_7_LVL, 0) +
+                      nvl(TNK_CND_8_LVL, 0) +
+                      nvl(TNK_CND_A_LVL, 0) +
+                      nvl(TNK_CND_B_LVL, 0) +
+                      nvl(TNK_CND_C_LVL, 0)) *
+                     20                       AS TankVol,
+                     GAS_VC,
+                     CASE WHEN (TNK_CND_1_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_CND_2_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_CND_3_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_CND_305A_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_CND_305B_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_CND_305C_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_CND_305D_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_CND_305E_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_CND_305F_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_CND_310A_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_CND_310B_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_CND_310C_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_CND_310D_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_CND_311_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_CND_4_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_CND_5_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_CND_6_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_CND_7_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_CND_8_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_CND_A_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_CND_B_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END +
+                     CASE WHEN (TNK_CND_C_LVL) >= 0
+                         THEN 1
+                     ELSE 0 END               AS TankCnt,
+                     'CND'                    AS Tank_Type
+                 FROM DATA_QUALITY.PI_WAM_ALL_WELLS_OPS
+                  --Where TIME >= trunc(sysdate-2)
+        ) Vol
+        WHERE Vol.TankVol > 0
+              --AND TIME >= trunc(sysdate)
+              --AND rk = 1
+    '''
+
+    cursor.execute(query)
+    results = cursor.fetchall()
+
+    df = pd.DataFrame.from_records(results)
+
+    try:
+        df.columns = pd.DataFrame(np.matrix(cursor.description))[0]
+        df.columns = [col.lower() for col in df.columns]
+    except:
+    	df = None
+    	print('Dataframe is empty')
+
+    cursor.close()
+    connection.close()
+
+    return df
+
+def tank_split(df):
+    base_df = df[['tag_prefix', 'time']]
+    base_df['water'] = np.nan
+    base_df['oil'] = np.nan
+    base_df['total'] = np.nan
+
+    base_df['water'] = base_df[(base_df[''])]
+
 def off_by_date(df):
     lim_df = df[(df['TOT_LVL'] > df['FacilityCapacity']) & (df['FacilityCapacity'] != 0)]
 
@@ -293,11 +621,14 @@ def plot_rate(df):
 
 if __name__ == '__main__':
     # df = gwr_pull()
+    # oracle_df = oracle_pull()
+    # oracle_df.to_csv('data/oracle_gwr.csv')
     # df.to_csv('data/full_gwr.csv')
 
-    df = pd.read_csv('data/full_gwr.csv')
+    # df = pd.read_csv('data/full_gwr.csv')
+    oracle_df = pd.read_csv('data/oracle_gwr.csv')
 
     # off_by_date(df)
 
-    for facility in df['FacilityKey'].unique():
-        plot_rate(df[df['FacilityKey'] == facility])
+    # for facility in df['FacilityKey'].unique():
+    #     plot_rate(df[df['FacilityKey'] == facility])
