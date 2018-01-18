@@ -265,6 +265,44 @@ def gwr_pull():
 
     return df
 
+def tag_dict():
+    try:
+        connection = pyodbc.connect(r'Driver={SQL Server Native Client 11.0};'
+                                    r'Server=SQLDW-L48.BP.Com;'
+                                    r'Database=TeamOptimizationEngineering;'
+                                    r'trusted_connection=yes'
+                                    )
+    except pyodbc.Error:
+    	print("Connection Error")
+    	sys.exit()
+
+    cursor = connection.cursor()
+    SQLCommand = ("""
+        SELECT  PTD.TAG
+                ,PTD.API
+                ,DF.Facilitykey
+        FROM [TeamOptimizationEngineering].[Reporting].[PITag_Dict] AS PTD
+        JOIN [TeamOptimizationEngineering].[dbo].[DimensionsWells] AS DW
+        	ON PTD.API = DW.API
+        JOIN [TeamOptimizationEngineering].[dbo].[DimensionsFacilities] AS DF
+        	ON DW.Facilitykey = DF.Facilitykey
+        GROUP BY PTD.TAG, PTD.API, DF.Facilitykey;
+    """)
+
+    cursor.execute(SQLCommand)
+    results = cursor.fetchall()
+
+    df = pd.DataFrame.from_records(results)
+    connection.close()
+
+    try:
+    	df.columns = pd.DataFrame(np.matrix(cursor.description))[0]
+    except:
+    	df = None
+    	print('Dataframe is empty')
+
+    return df.drop_duplicates()
+
 def oracle_pull():
     connection = cx_Oracle.connect("REPORTING", "REPORTING", "L48APPSP1.WORLD")
 
@@ -586,11 +624,44 @@ def oracle_pull():
 
 def tank_split(df):
     base_df = df[['tag_prefix', 'time']]
-    base_df['water'] = np.nan
-    base_df['oil'] = np.nan
-    base_df['total'] = np.nan
+    base_df.loc[:, 'water'] = np.nan
+    base_df.loc[:, 'oil'] = np.nan
+    base_df.loc[:, 'total'] = np.nan
 
-    base_df['water'] = base_df[(base_df[''])]
+    def water(row):
+        wat = df[(df['tag_prefix'] == row['tag_prefix']) & (df['time'] == row['time'])\
+                 & (df['tank_type'] == 'WAT')]['tankvol'].values
+        try:
+            val = wat[0]
+        except:
+            val = np.nan
+        return val
+
+    def cond(row):
+        cond = df[(df['tag_prefix'] == row['tag_prefix']) & (df['time'] == row['time'])\
+                 & (df['tank_type'] == 'CND')]['tankvol'].values
+        try:
+            val = cond[0]
+        except:
+            val = np.nan
+        return val
+
+    def total(row):
+        tot = df[(df['tag_prefix'] == row['tag_prefix']) & (df['time'] == row['time'])\
+                 & (df['tank_type'] == 'TOT')]['tankvol'].values
+        try:
+            val = tot[0]
+        except:
+            val = np.nan
+        return val
+
+    base_df.loc[:, 'water'] = base_df.apply(water, axis=1)
+    base_df.loc[:, 'oil'] = base_df.apply(cond, axis=1)
+    base_df.loc[:, 'total'] = base_df.apply(total, axis=1)
+    base_df.loc[base_df['oil'].isnull(), 'oil'] = base_df[base_df['oil'].isnull()]['total'] - \
+                                                base_df[base_df['oil'].isnull()]['water']
+
+    return base_df
 
 def off_by_date(df):
     lim_df = df[(df['TOT_LVL'] > df['FacilityCapacity']) & (df['FacilityCapacity'] != 0)]
@@ -622,11 +693,17 @@ def plot_rate(df):
 if __name__ == '__main__':
     # df = gwr_pull()
     # oracle_df = oracle_pull()
+    tag_df = tag_dict()
     # oracle_df.to_csv('data/oracle_gwr.csv')
     # df.to_csv('data/full_gwr.csv')
 
     # df = pd.read_csv('data/full_gwr.csv')
     oracle_df = pd.read_csv('data/oracle_gwr.csv')
+
+    df = tank_split(oracle_df)
+    df.to_csv('data/tankvol_df.csv')
+
+    vol_df = pd.read_csv('data/tankvol_df.csv')
 
     # off_by_date(df)
 
