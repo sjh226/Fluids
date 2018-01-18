@@ -9,11 +9,12 @@ def data_conn():
     cursor = connection.cursor()
     query = ("""
         SELECT  TAG_PREFIX
-                ,TIME
-                ,CTS_VC
+                ,TRUNC(TIME) AS my_date
+                ,MAX(CTS_VC)
         FROM DATA_QUALITY.PI_WAM_ALL_WELLS_OPS
         WHERE CTS_VC IS NOT NULL
-        ORDER BY TAG_PREFIX, TIME;
+        GROUP BY TAG_PREFIX, TRUNC(TIME)
+        ORDER BY TAG_PREFIX, TRUNC(TIME)
     """)
 
     cursor.execute(query)
