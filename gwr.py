@@ -623,45 +623,20 @@ def oracle_pull():
     return df
 
 def tank_split(df):
-    base_df = df[['tag_prefix', 'time']]
-    base_df.loc[:, 'water'] = np.nan
-    base_df.loc[:, 'oil'] = np.nan
-    base_df.loc[:, 'total'] = np.nan
+    water_df = df[df['tank_type'] == 'WAT'][['tag_prefix', 'time', 'tankvol']]
+    water_df.columns = ['tag_prefix', 'time', 'water']
+    oil_df = df[df['tank_type'] == 'CND'][['tag_prefix', 'time', 'tankvol']]
+    oil_df.columns = ['tag_prefix', 'time', 'oil']
+    total_df = df[df['tank_type'] == 'TOT'][['tag_prefix', 'time', 'tankvol']]
+    total_df.columns = ['tag_prefix', 'time', 'total']
 
-    def water(row):
-        wat = df[(df['tag_prefix'] == row['tag_prefix']) & (df['time'] == row['time'])\
-                 & (df['tank_type'] == 'WAT')]['tankvol'].values
-        try:
-            val = wat[0]
-        except:
-            val = np.nan
-        return val
+    base_df = water_df.merge(oil_df, on=['tag_prefix', 'time'], how='outer')
+    df = base_df.merge(total_df, on=['tag_prefix', 'time'], how='outer')
 
-    def cond(row):
-        cond = df[(df['tag_prefix'] == row['tag_prefix']) & (df['time'] == row['time'])\
-                 & (df['tank_type'] == 'CND')]['tankvol'].values
-        try:
-            val = cond[0]
-        except:
-            val = np.nan
-        return val
+    df.loc[df['oil'].isnull(), 'oil'] = df.loc[df['oil'].isnull(), 'total'] - \
+                                        df.loc[df['oil'].isnull(), 'water']
 
-    def total(row):
-        tot = df[(df['tag_prefix'] == row['tag_prefix']) & (df['time'] == row['time'])\
-                 & (df['tank_type'] == 'TOT')]['tankvol'].values
-        try:
-            val = tot[0]
-        except:
-            val = np.nan
-        return val
-
-    base_df.loc[:, 'water'] = base_df.apply(water, axis=1)
-    base_df.loc[:, 'oil'] = base_df.apply(cond, axis=1)
-    base_df.loc[:, 'total'] = base_df.apply(total, axis=1)
-    base_df.loc[base_df['oil'].isnull(), 'oil'] = base_df[base_df['oil'].isnull()]['total'] - \
-                                                base_df[base_df['oil'].isnull()]['water']
-
-    return base_df
+    return df
 
 def off_by_date(df):
     lim_df = df[(df['TOT_LVL'] > df['FacilityCapacity']) & (df['FacilityCapacity'] != 0)]
@@ -700,8 +675,8 @@ if __name__ == '__main__':
     # df = pd.read_csv('data/full_gwr.csv')
     oracle_df = pd.read_csv('data/oracle_gwr.csv')
 
-    df = tank_split(oracle_df)
-    df.to_csv('data/tankvol_df.csv')
+    # df = tank_split(oracle_df)
+    # df.to_csv('data/tankvol_df.csv')
 
     vol_df = pd.read_csv('data/tankvol_df.csv')
 
