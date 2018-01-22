@@ -627,7 +627,7 @@ def map_tag(vol, tag):
     df = vol.merge(tag, on='tag_prefix', how='inner')
     df = df.drop(['Unnamed: 0', 'tag_prefix', 'API'], axis=1)
     df = df.dropna()
-    df['oil_rate'] = df['oil'] - df['oil'].shift(1)
+    # df['oil_rate'] = df['oil'] - df['oil'].shift(1)
     df['time'] = pd.to_datetime(df['time'])
     df = df.groupby(['Facilitykey', 'time', 'FacilityCapacity'], as_index=False).sum()
     return df.sort_values(['Facilitykey', 'time'])
@@ -643,8 +643,8 @@ def tank_split(df):
     base_df = water_df.merge(oil_df, on=['tag_prefix', 'time'], how='outer')
     df = base_df.merge(total_df, on=['tag_prefix', 'time'], how='outer')
 
-    df.loc[df['oil'].isnull(), 'oil'] = df.loc[df['oil'].isnull(), 'total'] - \
-                                        df.loc[df['oil'].isnull(), 'water']
+    # df.loc[df['oil'].isnull(), 'oil'] = df.loc[df['oil'].isnull(), 'total'] - \
+    #                                     df.loc[df['oil'].isnull(), 'water']
 
     return df
 
@@ -715,13 +715,14 @@ if __name__ == '__main__':
     # oracle_df = pd.read_csv('data/oracle_gwr.csv')
 
     # df = tank_split(oracle_df)
-    # df.to_csv('data/tankvol_df.csv')
+    # df.to_csv('data/oilvol_df.csv')
 
-    vol_df = pd.read_csv('data/tankvol_df.csv')
+    vol_df = pd.read_csv('data/oilvol_df.csv')
+    vol_df = vol_df.dropna(subset=['oil'])
     df = map_tag(vol_df, tag_df)
 
     # off_by_date(df)
 
-    for facility in df['Facilitykey'].unique():
-        total_plot(df[df['Facilitykey'] == facility])
+    # for facility in df['Facilitykey'].unique():
+    #     total_plot(df[df['Facilitykey'] == facility])
         # break
