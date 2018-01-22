@@ -278,15 +278,16 @@ def tag_dict():
 
     cursor = connection.cursor()
     SQLCommand = ("""
-        SELECT  PTD.TAG
+        SELECT  PTD.TAG AS tag_prefix
                 ,PTD.API
                 ,DF.Facilitykey
+                ,DF.FacilityCapacity
         FROM [TeamOptimizationEngineering].[Reporting].[PITag_Dict] AS PTD
         JOIN [TeamOptimizationEngineering].[dbo].[DimensionsWells] AS DW
         	ON PTD.API = DW.API
         JOIN [TeamOptimizationEngineering].[dbo].[DimensionsFacilities] AS DF
         	ON DW.Facilitykey = DF.Facilitykey
-        GROUP BY PTD.TAG, PTD.API, DF.Facilitykey;
+        GROUP BY PTD.TAG, PTD.API, DF.Facilitykey, DF.FacilityCapacity;
     """)
 
     cursor.execute(SQLCommand)
@@ -622,6 +623,15 @@ def oracle_pull():
 
     return df
 
+def map_tag(vol, tag):
+    df = vol.merge(tag, on='tag_prefix', how='inner')
+    df = df.drop(['Unnamed: 0', 'tag_prefix', 'API'], axis=1)
+    df = df.dropna()
+    df['oil_rate'] = df['oil'] - df['oil'].shift(1)
+    df['time'] = pd.to_datetime(df['time'])
+    df = df.groupby(['Facilitykey', 'time', 'FacilityCapacity'], as_index=False).sum()
+    return df.sort_values(['Facilitykey', 'time'])
+
 def tank_split(df):
     water_df = df[df['tank_type'] == 'WAT'][['tag_prefix', 'time', 'tankvol']]
     water_df.columns = ['tag_prefix', 'time', 'water']
@@ -649,17 +659,46 @@ def off_by_date(df):
 
     print('Averaging {} bbl per day.'.format(np.mean(off_vals)))
 
+def total_plot(df):
+    plt.close()
+    fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+
+    facility = df['Facilitykey'].unique()[0]
+    capacity = df['FacilityCapacity'].unique()[0]
+
+    ax.plot(df['time'], df['oil'])
+    # ax.axhline(capacity, linestyle='--', color='#920f25', label='Facility Capacity')
+
+    plt.title('Total GWR Volumes for Facility {}'.format(facility))
+    plt.xlabel('Date')
+    plt.ylabel('bbl')
+
+    plt.xticks(rotation='vertical')
+    plt.tight_layout()
+
+    plt.savefig('images/totals/oil/oil_{}.png'.format(facility))
+
 def plot_rate(df):
     plt.close()
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
 
-    facility = df['FacilityKey'].unique()[0]
+    facility = df['Facilitykey'].unique()[0]
 
-    ax.plot(df['CalcDate'], df['TOT_rate'])
+    ax.plot(df['time'], df['oil_rate'])
 
     plt.title('Liquid Rates for Facility {}'.format(facility))
     plt.xlabel('Date')
     plt.ylabel('bbl/day')
+
+    cnt = 0
+    if len(ax.xaxis.get_ticklabels()) > 12:
+        for label in ax.xaxis.get_ticklabels():
+            if cnt % 7 == 0:
+                label.set_visible(True)
+            else:
+                label.set_visible(False)
+            cnt += 1
+
     plt.xticks(rotation='vertical')
 
     plt.savefig('images/rates/total/tot_rate_{}.png'.format(facility))
@@ -673,14 +712,16 @@ if __name__ == '__main__':
     # df.to_csv('data/full_gwr.csv')
 
     # df = pd.read_csv('data/full_gwr.csv')
-    oracle_df = pd.read_csv('data/oracle_gwr.csv')
+    # oracle_df = pd.read_csv('data/oracle_gwr.csv')
 
     # df = tank_split(oracle_df)
     # df.to_csv('data/tankvol_df.csv')
 
     vol_df = pd.read_csv('data/tankvol_df.csv')
+    df = map_tag(vol_df, tag_df)
 
     # off_by_date(df)
 
-    # for facility in df['FacilityKey'].unique():
-    #     plot_rate(df[df['FacilityKey'] == facility])
+    for facility in df['Facilitykey'].unique():
+        total_plot(df[df['Facilitykey'] == facility])
+        # break
