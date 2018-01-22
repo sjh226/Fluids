@@ -1,4 +1,6 @@
 import cx_Oracle
+import pyodbc
+import sys
 import numpy as np
 import pandas as pd
 
@@ -10,7 +12,7 @@ def data_conn():
 	query = ("""
 		SELECT  TAG_PREFIX
 				,TRUNC(TIME) AS my_date
-				,MAX(CTS_VC)
+				,MAX(CTS_VC) AS volume
 		FROM DATA_QUALITY.PI_WAM_ALL_WELLS_OPS
 		WHERE CTS_VC IS NOT NULL
 		GROUP BY TAG_PREFIX, TRUNC(TIME)
@@ -73,11 +75,22 @@ def tag_dict():
 
 	return df.drop_duplicates()
 
+def map_tag(vol, tag):
+	df = vol.merge(tag, on='tag_prefix', how='inner')
+	df = df.drop(['Unnamed: 0', 'tag_prefix', 'API'], axis=1)
+	df = df.dropna()
+	# df['oil_rate'] = df['volume'] - df['oil'].shift(1)
+	df['my_date'] = pd.to_datetime(df['my_date'])
+	df = df.groupby(['Facilitykey', 'my_date', 'FacilityCapacity'], as_index=False).sum()
+	return df.sort_values(['Facilitykey', 'my_date'])
+
 
 if __name__ == "__main__":
-	df = data_conn()
-	df.to_csv('data/turbine.csv')
+	# df = data_conn()
+	# df.to_csv('data/turbine.csv')
 
-	df = pd.read_csv('data/turbine.csv')
+	vol_df = pd.read_csv('data/turbine.csv')
 
 	tag_df = tag_dict()
+
+	df = map_tag(vol_df, tag_df)
