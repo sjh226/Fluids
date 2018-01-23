@@ -625,7 +625,7 @@ def oracle_pull():
 
 def map_tag(vol, tag):
     df = vol.merge(tag, on='tag_prefix', how='inner')
-    df = df.drop(['Unnamed: 0', 'tag_prefix', 'API'], axis=1)
+    df = df.drop(['tag_prefix', 'API'], axis=1)
     df = df.dropna()
     # df['oil_rate'] = df['oil'] - df['oil'].shift(1)
     df['time'] = pd.to_datetime(df['time'])
@@ -643,10 +643,17 @@ def tank_split(df):
     base_df = water_df.merge(oil_df, on=['tag_prefix', 'time'], how='outer')
     df = base_df.merge(total_df, on=['tag_prefix', 'time'], how='outer')
 
-    # df.loc[df['oil'].isnull(), 'oil'] = df.loc[df['oil'].isnull(), 'total'] - \
-    #                                     df.loc[df['oil'].isnull(), 'water']
+    df.loc[df['oil'].isnull(), 'oil'] = df.loc[df['oil'].isnull(), 'total'] - \
+                                        df.loc[df['oil'].isnull(), 'water']
 
     return df
+
+def tank_na_fill(df):
+    result_df = pd.DataFrame(columns=df.columns)
+    for tank in df['tag_prefix'].unique():
+        tank_df = df[df['tag_prefix'] == tank].fillna(method='ffill')
+        result_df = result_df.append(tank_df)
+    return result_df
 
 def off_by_date(df):
     lim_df = df[(df['TOT_LVL'] > df['FacilityCapacity']) & (df['FacilityCapacity'] != 0)]
@@ -712,17 +719,18 @@ if __name__ == '__main__':
     # df.to_csv('data/full_gwr.csv')
 
     # df = pd.read_csv('data/full_gwr.csv')
-    # oracle_df = pd.read_csv('data/oracle_gwr.csv')
+    oracle_df = pd.read_csv('data/oracle_gwr.csv')
 
-    # df = tank_split(oracle_df)
-    # df.to_csv('data/oilvol_df.csv')
+    df = tank_split(oracle_df)
+    df = tank_na_fill(df)
+    df.to_csv('data/ffill_vol_df.csv')
 
-    vol_df = pd.read_csv('data/oilvol_df.csv')
-    vol_df = vol_df.dropna(subset=['oil'])
+    vol_df = pd.read_csv('data/ffillvol_df.csv')
+    # vol_df = vol_df.dropna(subset=['oil'])
     df = map_tag(vol_df, tag_df)
 
     # off_by_date(df)
 
-    # for facility in df['Facilitykey'].unique():
-    #     total_plot(df[df['Facilitykey'] == facility])
+    for facility in df['Facilitykey'].unique():
+        total_plot(df[df['Facilitykey'] == facility])
         # break
