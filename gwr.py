@@ -304,6 +304,40 @@ def tag_dict():
 
     return df.drop_duplicates()
 
+def tank_count():
+    try:
+        connection = pyodbc.connect(r'Driver={SQL Server Native Client 11.0};'
+                                    r'Server=SQLDW-L48.BP.Com;'
+                                    r'Database=OperationsDataMart;'
+                                    r'trusted_connection=yes'
+                                    )
+    except pyodbc.Error:
+    	print("Connection Error")
+    	sys.exit()
+
+    cursor = connection.cursor()
+    SQLCommand = ("""
+        SELECT DT.Facilitykey
+        	   ,COUNT(DT.Tankkey) AS tank_count
+        FROM [TeamOptimizationEngineering].[dbo].[DimensionsTanks] DT
+        WHERE DT.BusinessUnit = 'North'
+        GROUP BY DT.Facilitykey;
+    """)
+
+    cursor.execute(SQLCommand)
+    results = cursor.fetchall()
+
+    df = pd.DataFrame.from_records(results)
+    connection.close()
+
+    try:
+    	df.columns = pd.DataFrame(np.matrix(cursor.description))[0]
+    except:
+    	df = None
+    	print('Dataframe is empty')
+
+    return df.drop_duplicates()
+
 def oracle_pull():
     connection = cx_Oracle.connect("REPORTING", "REPORTING", "L48APPSP1.WORLD")
 
@@ -627,21 +661,24 @@ def map_tag(vol, tag):
     df = vol.merge(tag, on='tag_prefix', how='inner')
     # df = df.drop(['tag_prefix', 'API'], axis=1)
     df = df.dropna()
-    # df['oil_rate'] = df['oil'] - df['oil'].shift(1)
+    df['oil_rate'] = df['oil'] - df['oil'].shift(1)
+    df.loc[df['oil_rate'] < 0, 'oil_rate'] = np.nan
+    df['oil_rate']
     df['time'] = pd.to_datetime(df['time'])
-    df = df.groupby(['Facilitykey', 'time', 'FacilityCapacity', 'tag_prefix'], as_index=False).sum()
+    df = df.groupby(['Facilitykey', 'time', 'FacilityCapacity', 'tag_prefix', 'tankcnt'], as_index=False).mean()
+    df = df.groupby(['Facilitykey', 'time', 'FacilityCapacity', 'tag_prefix'], as_index=False).max()
     return df.sort_values(['Facilitykey', 'time'])
 
 def tank_split(df):
-    water_df = df[df['tank_type'] == 'WAT'][['tag_prefix', 'time', 'tankvol']]
-    water_df.columns = ['tag_prefix', 'time', 'water']
-    oil_df = df[df['tank_type'] == 'CND'][['tag_prefix', 'time', 'tankvol']]
-    oil_df.columns = ['tag_prefix', 'time', 'oil']
-    total_df = df[df['tank_type'] == 'TOT'][['tag_prefix', 'time', 'tankvol']]
-    total_df.columns = ['tag_prefix', 'time', 'total']
+    water_df = df[df['tank_type'] == 'WAT'][['tag_prefix', 'time', 'tankvol', 'tankcnt']]
+    water_df.columns = ['tag_prefix', 'time', 'water', 'tankcnt']
+    oil_df = df[df['tank_type'] == 'CND'][['tag_prefix', 'time', 'tankvol', 'tankcnt']]
+    oil_df.columns = ['tag_prefix', 'time', 'oil', 'tankcnt']
+    total_df = df[df['tank_type'] == 'TOT'][['tag_prefix', 'time', 'tankvol', 'tankcnt']]
+    total_df.columns = ['tag_prefix', 'time', 'total', 'tankcnt']
 
-    base_df = water_df.merge(oil_df, on=['tag_prefix', 'time'], how='outer')
-    df = base_df.merge(total_df, on=['tag_prefix', 'time'], how='outer')
+    base_df = water_df.merge(oil_df, on=['tag_prefix', 'time', 'tankcnt'], how='outer')
+    df = base_df.merge(total_df, on=['tag_prefix', 'time', 'tankcnt'], how='outer')
 
     df.loc[df['oil'].isnull(), 'oil'] = df.loc[df['oil'].isnull(), 'total'] - \
                                         df.loc[df['oil'].isnull(), 'water']
@@ -712,6 +749,13 @@ def plot_rate(df):
 
     plt.savefig('images/rates/total/tot_rate_{}.png'.format(facility))
 
+def tank_merge(pi_df, sql_df):
+    pi_df['gwr_tanks'] = pi_df['tankcnt']
+    pi_df = pi_df[['Facilitykey', 'tankcnt']]
+    df = pi_df.merge(sql_df, on='Facilitykey', how='outer')
+    df.fillna(0, inplace=True)
+    return df.drop_duplicates()
+
 
 if __name__ == '__main__':
     # df = gwr_pull()
@@ -728,12 +772,15 @@ if __name__ == '__main__':
     # df.to_csv('data/nan_vol_df.csv')
 
     vol_df = pd.read_csv('data/nan_vol_df.csv')
-    vol_df = vol_df.dropna()
+    tank_df = tank_count()
+    # vol_df = vol_df.dropna()
     # vol_df = vol_df.dropna(subset=['oil'])
     df = map_tag(vol_df, tag_df)
 
+    tank_df = tank_merge(df, tank_df)
+
     # off_by_date(df)
 
-    for facility in df['Facilitykey'].unique():
-        total_plot(df[df['Facilitykey'] == facility])
+    # for facility in df['Facilitykey'].unique():
+    #     total_plot(df[df['Facilitykey'] == facility])
         # break
