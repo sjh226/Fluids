@@ -625,11 +625,11 @@ def oracle_pull():
 
 def map_tag(vol, tag):
     df = vol.merge(tag, on='tag_prefix', how='inner')
-    df = df.drop(['tag_prefix', 'API'], axis=1)
+    # df = df.drop(['tag_prefix', 'API'], axis=1)
     df = df.dropna()
     # df['oil_rate'] = df['oil'] - df['oil'].shift(1)
     df['time'] = pd.to_datetime(df['time'])
-    df = df.groupby(['Facilitykey', 'time', 'FacilityCapacity'], as_index=False).sum()
+    df = df.groupby(['Facilitykey', 'time', 'FacilityCapacity', 'tag_prefix'], as_index=False).sum()
     return df.sort_values(['Facilitykey', 'time'])
 
 def tank_split(df):
@@ -670,10 +670,12 @@ def total_plot(df):
     plt.close()
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
 
+    df = df[df['time'] >= df['time'].max() - pd.Timedelta('31 days')]
+
     facility = df['Facilitykey'].unique()[0]
     capacity = df['FacilityCapacity'].unique()[0]
 
-    ax.plot(df['time'], df['oil'])
+    ax.plot(df['time'], df['total'])
     # ax.axhline(capacity, linestyle='--', color='#920f25', label='Facility Capacity')
 
     plt.title('Total GWR Volumes for Facility {}'.format(facility))
@@ -683,7 +685,7 @@ def total_plot(df):
     plt.xticks(rotation='vertical')
     plt.tight_layout()
 
-    plt.savefig('images/totals/oil/oil_{}.png'.format(facility))
+    plt.savefig('images/totals/total/tot_{}.png'.format(facility))
 
 def plot_rate(df):
     plt.close()
@@ -719,13 +721,14 @@ if __name__ == '__main__':
     # df.to_csv('data/full_gwr.csv')
 
     # df = pd.read_csv('data/full_gwr.csv')
-    oracle_df = pd.read_csv('data/oracle_gwr.csv')
+    # oracle_df = pd.read_csv('data/oracle_gwr.csv')
 
-    df = tank_split(oracle_df)
-    df = tank_na_fill(df)
-    df.to_csv('data/ffill_vol_df.csv')
+    # df = tank_split(oracle_df)
+    # df = tank_na_fill(df)
+    # df.to_csv('data/nan_vol_df.csv')
 
-    vol_df = pd.read_csv('data/ffillvol_df.csv')
+    vol_df = pd.read_csv('data/nan_vol_df.csv')
+    vol_df = vol_df.dropna()
     # vol_df = vol_df.dropna(subset=['oil'])
     df = map_tag(vol_df, tag_df)
 
