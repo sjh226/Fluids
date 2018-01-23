@@ -3,6 +3,7 @@ import pyodbc
 import sys
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 
 
 def data_conn():
@@ -84,13 +85,30 @@ def map_tag(vol, tag):
 	df = df.groupby(['Facilitykey', 'my_date', 'FacilityCapacity'], as_index=False).sum()
 	return df.sort_values(['Facilitykey', 'my_date'])
 
+def plot_rate(df):
+	plt.close()
+	fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+
+	facility = df['Facilitykey'].unique()[0]
+
+	ax.plot(df['my_date'], df['volume'])
+
+	plt.title('Liquid Rates for Facility {}'.format(facility))
+	plt.xlabel('Date')
+	plt.ylabel('bbl/day')
+	plt.xticks(rotation='vertical')
+
+	plt.savefig('images/turbine/rate_{}.png'.format(facility))
+
 
 if __name__ == "__main__":
 	# df = data_conn()
 	# df.to_csv('data/turbine.csv')
 
 	vol_df = pd.read_csv('data/turbine.csv')
-
 	tag_df = tag_dict()
-
 	df = map_tag(vol_df, tag_df)
+
+	for facility in df['Facilitykey'].unique():
+		plot_rate(df[df['Facilitykey'] == facility])
+		# break
