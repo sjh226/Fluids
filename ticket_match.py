@@ -166,26 +166,20 @@ def total_plot(df, t_df):
 
     plt.savefig('images/gwr/oil/oil_{}.png'.format(facility))
 
-def plot_rate(df, g_df):
+def plot_rate(rate_df):
     plt.close()
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+    df = rate_df[['time', 'oil_rate']]
+    df.loc[df['oil_rate'] < 0, 'oil_rate'] = np.nan
+    df.dropna(inplace=True)
 
-    facility = df['Facilitykey'].unique()[0]
+    facility = rate_df['Facilitykey'].unique()[0]
 
     ax.plot(df['time'], df['oil_rate'])
 
-    plt.title('Liquid Rates for Facility {}'.format(facility))
+    plt.title('Oil Rates for Facility {}'.format(facility))
     plt.xlabel('Date')
     plt.ylabel('bbl/day')
-
-    # cnt = 0
-    # if len(ax.xaxis.get_ticklabels()) > 12:
-    #     for label in ax.xaxis.get_ticklabels():
-    #         if cnt % 7 == 0:
-    #             label.set_visible(True)
-    #         else:
-    #             label.set_visible(False)
-    #         cnt += 1
 
     plt.xticks(rotation='vertical')
     plt.savefig('images/rates/total/tot_rate_{}.png'.format(facility))
@@ -196,6 +190,14 @@ def tank_merge(pi_df, sql_df):
     df = pi_df.merge(sql_df, on='Facilitykey', how='outer')
     df.fillna(0, inplace=True)
     return df.drop_duplicates()
+
+def get_rate(df):
+    result_df = pd.DataFrame(columns=df.columns)
+    for tank in df['tag_prefix'].unique():
+        tank_df = df[df['tag_prefix'] == tank].sort_values('time')
+        tank_df['oil_rate'] = tank_df['oil'] - tank_df['oil'].shift(1)
+        result_df = result_df.append(tank_df)
+    return result_df
 
 
 if __name__ == '__main__':
@@ -210,6 +212,14 @@ if __name__ == '__main__':
     gauges = gauge_pull()
     ticket_df = ticket_pull()
 
+    # rate_df = get_rate(df)
+    # rate_df.to_csv('data/gwr_oil_rate.csv')
+    rate_df = pd.read_csv('data/gwr_oil_rate.csv')
+
+    # for facility in match_df['Facilitykey'].unique():
+    #     total_plot(df[df['Facilitykey'] == facility], ticket_df[ticket_df['Facilitykey'] == facility])
+    #     break
+
     for facility in match_df['Facilitykey'].unique():
-        total_plot(df[df['Facilitykey'] == facility], ticket_df[ticket_df['Facilitykey'] == facility])
-        break
+        plot_rate(df[df['Facilitykey'] == facility])
+        # break
