@@ -707,7 +707,7 @@ def total_plot(df):
     plt.close()
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
 
-    df = df[df['time'] >= df['time'].max() - pd.Timedelta('31 days')]
+    # df = df[df['time'] >= df['time'].max() - pd.Timedelta('31 days')]
 
     facility = df['Facilitykey'].unique()[0]
     capacity = df['FacilityCapacity'].unique()[0]
@@ -719,10 +719,14 @@ def total_plot(df):
     plt.xlabel('Date')
     plt.ylabel('bbl')
 
+    ymin, ymax = plt.ylim()
+    if ymin > 0:
+        plt.ylim(ymin=0)
+
     plt.xticks(rotation='vertical')
     plt.tight_layout()
 
-    plt.savefig('images/totals/total/tot_{}.png'.format(facility))
+    plt.savefig('images/gwr/total/tot_{}.png'.format(facility))
 
 def plot_rate(df):
     plt.close()
@@ -778,9 +782,10 @@ if __name__ == '__main__':
     df = map_tag(vol_df, tag_df)
 
     tank_df = tank_merge(df, tank_df)
+    match_df = tank_df[tank_df['tankcnt'] == tank_df['tank_count']]
 
     # off_by_date(df)
 
-    # for facility in df['Facilitykey'].unique():
-    #     total_plot(df[df['Facilitykey'] == facility])
+    for facility in match_df['Facilitykey'].unique():
+        total_plot(df[df['Facilitykey'] == facility])
         # break
