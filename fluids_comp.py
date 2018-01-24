@@ -19,23 +19,23 @@ def lgr_pull():
     cursor = connection.cursor()
     SQLCommand = ("""
         SELECT  LGR.FacilityKey
+                ,LGR.FacilityName
                 ,AVG(LGR.TotalOilOnSite) AS LGROil
                 ,AVG(LGR.TotalWaterOnSite) AS LGRWater
                 ,LGR.FacilityCapacity
                 ,LGR.CalcDate
                 ,LGR.PredictionMethod
-        FROM [TeamOptimizationEngineering].[dbo].[Inventory] AS LGR
+        FROM [TeamOptimizationEngineering].[dbo].[InventoryAll_Calculated] AS LGR
         JOIN (SELECT	FacilityKey
         				,MAX(CalcDate) maxtime
-        		FROM [TeamOptimizationEngineering].[dbo].[Inventory]
+        		FROM [TeamOptimizationEngineering].[dbo].[InventoryAll_Calculated]
         		GROUP BY FacilityKey, DAY(CalcDate), MONTH(CalcDate), YEAR(CalcDate)) AS MD
         	ON	MD.FacilityKey = LGR.FacilityKey
         	AND	MD.maxtime = LGR.CalcDate
         JOIN [TeamOptimizationEngineering].[dbo].[DimensionsWells] AS DW
         	ON LGR.FacilityKey = DW.FacilityKey
-        JOIN [TeamOptimizationEngineering].[Reporting].[PITag_Dict] AS PTD
-        	ON PTD.API = DW.API
-        GROUP BY LGR.FacilityKey, LGR.FacilityCapacity, LGR.CalcDate, LGR.PredictionMethod;
+        WHERE LGR.PredictionMethod = 'LGRv4'
+        GROUP BY LGR.FacilityKey, LGR.FacilityName, LGR.FacilityCapacity, LGR.CalcDate, LGR.PredictionMethod;
     """)
 
     # WHERE	LGR.FacilityKey IN (
@@ -328,7 +328,7 @@ def lgr_gauge_plot(lgr_df, gauge_df):
     ax.axhline(capacity, date_min, date_max, linestyle='--', color='#920f25', label='Facility Capacity')
     ymin, ymax = plt.ylim()
 
-    facility = lgr_df['FacilityKey'].unique()[0]
+    facility = lgr_df['FacilityName'].unique()[0]
     plt.title('LGR for Facility {}'.format(facility))
     ax.set_xlabel('Date')
     ax.set_ylabel('bbl Oil')
@@ -350,7 +350,7 @@ def lgr_gauge_plot(lgr_df, gauge_df):
     plt.xticks(rotation='vertical')
     plt.legend()
 
-    plt.savefig('images/lgr/lgr_gauge_{}.png'.format(facility))
+    plt.savefig('images/lgr/v4/lgr_gauge_{}.png'.format(facility))
 
 def lgr_over(df):
     plt.close()
@@ -375,17 +375,17 @@ def lgr_over(df):
 
 
 if __name__ == '__main__':
-    # df_lgr = lgr_pull()
+    df_lgr = lgr_pull()
     # df_gwr = gwr_pull()
-    # gauge_df = gauge_pull()
+    gauge_df = gauge_pull()
 
     # df_lgr.to_csv('data/lgr.csv')
     # df_gwr.to_csv('data/gwr.csv')
     # gauge_df.to_csv('data/gauges.csv')
 
-    df_lgr = pd.read_csv('data/lgr.csv')
+    # df_lgr = pd.read_csv('data/lgr.csv')
     # df_gwr = pd.read_csv('data/gwr.csv')
-    gauge_df = pd.read_csv('data/gauges.csv')
+    # gauge_df = pd.read_csv('data/gauges.csv')
 
     for facility in sorted(df_lgr['FacilityKey'].unique()):
         lgr_gauge_plot(df_lgr[df_lgr['FacilityKey'] == facility].sort_values('CalcDate'), \
