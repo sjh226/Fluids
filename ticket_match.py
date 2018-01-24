@@ -122,14 +122,14 @@ def ticket_pull():
 
 def map_tag(vol, tag):
     df = vol.merge(tag, on='tag_prefix', how='inner')
-    # df = df.drop(['tag_prefix', 'API'], axis=1)
+    df = df.drop(['tag_prefix'], axis=1)
     df = df.dropna()
     df['oil_rate'] = df['oil'] - df['oil'].shift(1)
     df.loc[df['oil_rate'] < 0, 'oil_rate'] = np.nan
     df['oil_rate']
     df['time'] = pd.to_datetime(df['time'])
-    df = df.groupby(['Facilitykey', 'time', 'FacilityCapacity', 'tag_prefix', 'tankcnt'], as_index=False).mean()
-    df = df.groupby(['Facilitykey', 'time', 'FacilityCapacity', 'tag_prefix'], as_index=False).max()
+    df = df.groupby(['Facilitykey', 'time', 'FacilityCapacity', 'tankcnt'], as_index=False).mean()
+    df = df.groupby(['Facilitykey', 'time', 'FacilityCapacity'], as_index=False).max()
     return df.sort_values(['Facilitykey', 'time'])
 
 def total_plot(df, t_df):
@@ -166,23 +166,22 @@ def total_plot(df, t_df):
 
     plt.savefig('images/gwr/oil/oil_{}.png'.format(facility))
 
-def plot_rate(rate_df):
+def plot_smooth(df):
     plt.close()
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
-    df = rate_df[['time', 'oil_rate']]
-    df.loc[df['oil_rate'] < 0, 'oil_rate'] = np.nan
+    df = df.sort_values('time')
     df.dropna(inplace=True)
 
-    facility = rate_df['Facilitykey'].unique()[0]
+    facility = int(df['Facilitykey'].unique()[0])
 
-    ax.plot(df['time'], df['oil_rate'])
+    ax.plot(df['time'], df['total'])
 
-    plt.title('Oil Rates for Facility {}'.format(facility))
+    plt.title('Smoothed Total Inventory for Facility {}'.format(facility))
     plt.xlabel('Date')
-    plt.ylabel('bbl/day')
+    plt.ylabel('Total Volume (bbl)')
 
     plt.xticks(rotation='vertical')
-    plt.savefig('images/rates/total/tot_rate_{}.png'.format(facility))
+    plt.savefig('images/gwr/smooth/tot_{}.png'.format(facility))
 
 def tank_merge(pi_df, sql_df):
     pi_df['gwr_tanks'] = pi_df['tankcnt']
@@ -192,11 +191,28 @@ def tank_merge(pi_df, sql_df):
     return df.drop_duplicates()
 
 def get_rate(df):
-    result_df = pd.DataFrame(columns=df.columns)
-    for tank in df['tag_prefix'].unique():
-        tank_df = df[df['tag_prefix'] == tank].sort_values('time')
-        tank_df['oil_rate'] = tank_df['oil'] - tank_df['oil'].shift(1)
-        result_df = result_df.append(tank_df)
+    result_df = pd.DataFrame(columns=list(df.columns).append('oil_rate'))
+    for fac in df['Facilitykey'].unique():
+        tank_df = df[df['Facilitykey'] == fac].sort_values('time')
+        shift_df = pd.DataFrame(columns=list(df.columns).append('oil_rate'))
+        first_day = tank_df['time'].min()
+        data_shift = 0
+        tank_df['rate'] = tank_df['total'].shift(-1) - tank_df['total']
+        i = 0
+        for idx, row in tank_df.iterrows():
+            val = row['total'] + data_shift
+            if abs(row['rate']) > (row['total'] * .25):
+                if row['rate'] < 0:
+                    data_shift += abs(row['rate'])
+                    row['total'] = val
+                    shift_df = shift_df.append(row)
+                else:
+                    pass
+            else:
+                row['total'] = val
+                shift_df = shift_df.append(row)
+            i += 1
+        result_df = result_df.append(shift_df)
     return result_df
 
 
@@ -205,21 +221,24 @@ if __name__ == '__main__':
     vol_df = pd.read_csv('data/nan_vol_df.csv')
     df = map_tag(vol_df, tag_df)
 
-    tank_df = tank_count()
-    tank_df = tank_merge(df, tank_df)
-    match_df = tank_df[tank_df['tankcnt'] == tank_df['tank_count']]
+    # tank_df = tank_count()
+    # tank_df = tank_merge(df, tank_df)
+    # match_df = tank_df[tank_df['tankcnt'] == tank_df['tank_count']]
 
-    gauges = gauge_pull()
-    ticket_df = ticket_pull()
+    # gauges = gauge_pull()
+    # ticket_df = ticket_pull()
 
-    # rate_df = get_rate(df)
+    test = df[df['Facilitykey'] == 97]
+    rate_df = get_rate(df)
+    for facility in rate_df['Facilitykey'].unique():
+        plot_smooth(rate_df[rate_df['Facilitykey'] == facility])
     # rate_df.to_csv('data/gwr_oil_rate.csv')
-    rate_df = pd.read_csv('data/gwr_oil_rate.csv')
+    # rate_df = pd.read_csv('data/gwr_oil_rate.csv')
 
     # for facility in match_df['Facilitykey'].unique():
     #     total_plot(df[df['Facilitykey'] == facility], ticket_df[ticket_df['Facilitykey'] == facility])
     #     break
 
-    for facility in match_df['Facilitykey'].unique():
-        plot_rate(df[df['Facilitykey'] == facility])
+    # for facility in match_df['Facilitykey'].unique():
+    #     plot_rate(df[df['Facilitykey'] == facility])
         # break
