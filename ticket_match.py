@@ -216,10 +216,10 @@ if __name__ == '__main__':
     # rate_df.to_csv('data/gwr_oil_rate.csv')
     rate_df = pd.read_csv('data/gwr_oil_rate.csv')
 
-    # for facility in match_df['Facilitykey'].unique():
-    #     total_plot(df[df['Facilitykey'] == facility], ticket_df[ticket_df['Facilitykey'] == facility])
+    for facility in match_df['Facilitykey'].unique():
+        total_plot(df[df['Facilitykey'] == facility], ticket_df[ticket_df['Facilitykey'] == facility])
     #     break
 
-    for facility in match_df['Facilitykey'].unique():
-        plot_rate(df[df['Facilitykey'] == facility])
+    # for facility in match_df['Facilitykey'].unique():
+    #     plot_rate(df[df['Facilitykey'] == facility])
         # break
