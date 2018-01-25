@@ -317,11 +317,11 @@ def tank_count():
 
     cursor = connection.cursor()
     SQLCommand = ("""
-        SELECT DT.Facilitykey
-        	   ,COUNT(DT.Tankkey) AS tank_count
-        FROM [TeamOptimizationEngineering].[dbo].[DimensionsTanks] DT
-        WHERE DT.BusinessUnit = 'North'
-        GROUP BY DT.Facilitykey;
+        SELECT DF.Facilitykey
+               ,DF.FacilityName
+        	   ,DF.TankCount
+        FROM [TeamOptimizationEngineering].[dbo].[DimensionsFacilities] DF
+        WHERE DF.BusinessUnit = 'North';
     """)
 
     cursor.execute(SQLCommand)
@@ -780,12 +780,12 @@ if __name__ == '__main__':
     # vol_df = vol_df.dropna()
     # vol_df = vol_df.dropna(subset=['oil'])
     df = map_tag(vol_df, tag_df)
-
+    #
     tank_df = tank_merge(df, tank_df)
-    match_df = tank_df[tank_df['tankcnt'] == tank_df['tank_count']]
+    match_df = tank_df[tank_df['tankcnt'] == tank_df['TankCount']]
 
     # off_by_date(df)
 
-    for facility in match_df['Facilitykey'].unique():
-        total_plot(df[df['Facilitykey'] == facility])
+    # for facility in match_df['Facilitykey'].unique():
+    #     total_plot(df[df['Facilitykey'] == facility])
         # break
