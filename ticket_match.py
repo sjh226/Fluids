@@ -6,6 +6,7 @@ import sys
 import cx_Oracle
 from fluids_comp import gauge_pull
 from scipy.stats import iqr
+from sklearn.linear_model import LinearRegression
 
 
 def tag_dict():
@@ -259,6 +260,23 @@ def rate_it(df):
     result_df = df[(df['rate'] >= lower_iqr) & (df['rate'] <= upper_iqr)]
     return result_df
 
+def rolling_regr(df):
+    lr = LinearRegression()
+    df.loc[:, 'rate'] = np.nan
+    i = 0
+    for idx, row in df.iterrows():
+        if i == 0:
+            i = idx
+        elif idx - i > df.shape[0] - 7:
+            break
+        X = df.loc[idx:idx + 7, 'time'].values.reshape(-1, 1).astype(float)
+        y = df.loc[idx:idx + 7, 'total'].values.reshape(-1, 1)
+        window_lr = lr.fit(X, y)
+        if window_lr.coef_[0][0] > 0:
+            df.loc[idx, 'rate'] = window_lr.coef_[0][0]
+    df['rate'].fillna(method='ffill', inplace=True)
+    return df
+
 
 if __name__ == '__main__':
     tag_df = tag_dict()
@@ -274,7 +292,9 @@ if __name__ == '__main__':
 
     test = df[df['Facilitykey'] == 361]
     # rate_df = get_rate(test)
-    rate_df = rate_it(test)
+    rate_df = rolling_regr(df)
+    rate_df.to_csv('data/rolling_regr.csv')
+    rate_df = rate_df.groupby(['Facilitykey', rate_df['time'].date()])
     # rate_df = pd.read_csv('data/smoothed_gwr.csv')
     for facility in rate_df['Facilitykey'].unique():
         plot_rate(rate_df[rate_df['Facilitykey'] == facility])
