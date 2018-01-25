@@ -282,12 +282,13 @@ def tag_dict():
                 ,PTD.API
                 ,DF.Facilitykey
                 ,DF.FacilityCapacity
+                ,DF.FacilityName
         FROM [TeamOptimizationEngineering].[Reporting].[PITag_Dict] AS PTD
         JOIN [TeamOptimizationEngineering].[dbo].[DimensionsWells] AS DW
         	ON PTD.API = DW.API
         JOIN [TeamOptimizationEngineering].[dbo].[DimensionsFacilities] AS DF
         	ON DW.Facilitykey = DF.Facilitykey
-        GROUP BY PTD.TAG, PTD.API, DF.Facilitykey, DF.FacilityCapacity;
+        GROUP BY PTD.TAG, PTD.API, DF.Facilitykey, DF.FacilityCapacity, DF.FacilityName;
     """)
 
     cursor.execute(SQLCommand)
@@ -665,8 +666,8 @@ def map_tag(vol, tag):
     df.loc[df['oil_rate'] < 0, 'oil_rate'] = np.nan
     df['oil_rate']
     df['time'] = pd.to_datetime(df['time'])
-    df = df.groupby(['Facilitykey', 'time', 'FacilityCapacity', 'tag_prefix', 'tankcnt'], as_index=False).mean()
-    df = df.groupby(['Facilitykey', 'time', 'FacilityCapacity', 'tag_prefix'], as_index=False).max()
+    df = df.groupby(['Facilitykey', 'time', 'FacilityCapacity', 'FacilityName', 'tag_prefix', 'tankcnt'], as_index=False).mean()
+    df = df.groupby(['Facilitykey', 'time', 'FacilityCapacity', 'FacilityName', 'tag_prefix'], as_index=False).max()
     return df.sort_values(['Facilitykey', 'time'])
 
 def tank_split(df):
@@ -709,13 +710,13 @@ def total_plot(df):
 
     # df = df[df['time'] >= df['time'].max() - pd.Timedelta('31 days')]
 
-    facility = df['Facilitykey'].unique()[0]
-    capacity = df['FacilityCapacity'].unique()[0]
+    facility = df['FacilityName'].unique()[0]
+    # capacity = df['FacilityCapacity'].unique()[0]
 
-    ax.plot(df['time'], df['total'])
+    ax.plot(df['time'], df['oil'])
     # ax.axhline(capacity, linestyle='--', color='#920f25', label='Facility Capacity')
 
-    plt.title('Total GWR Volumes for Facility {}'.format(facility))
+    plt.title('Oil GWR Volumes for Facility {}'.format(facility))
     plt.xlabel('Date')
     plt.ylabel('bbl')
 
@@ -726,7 +727,7 @@ def total_plot(df):
     plt.xticks(rotation='vertical')
     plt.tight_layout()
 
-    plt.savefig('images/gwr/total/tot_{}.png'.format(facility))
+    plt.savefig('images/gwr/good/oil_{}.png'.format(facility))
 
 def plot_rate(df):
     plt.close()
@@ -760,6 +761,11 @@ def tank_merge(pi_df, sql_df):
     df.fillna(0, inplace=True)
     return df.drop_duplicates()
 
+def best_tanks(best_df):
+    df = best_df[['Facilitykey', 'FacilityName', 'time', 'water', 'oil']]
+    for facility in df['Facilitykey'].unique():
+        total_plot(df[df['Facilitykey'] == facility])
+
 
 if __name__ == '__main__':
     # df = gwr_pull()
@@ -769,20 +775,25 @@ if __name__ == '__main__':
     # df.to_csv('data/full_gwr.csv')
 
     # df = pd.read_csv('data/full_gwr.csv')
-    # oracle_df = pd.read_csv('data/oracle_gwr.csv')
+    oracle_df = pd.read_csv('data/oracle_gwr.csv')
 
-    # df = tank_split(oracle_df)
+    df = tank_split(oracle_df)
+    df.drop('total', axis=1, inplace=True)
+    df.dropna(inplace=True)
     # df = tank_na_fill(df)
     # df.to_csv('data/nan_vol_df.csv')
 
-    vol_df = pd.read_csv('data/nan_vol_df.csv')
+    # vol_df = pd.read_csv('data/nan_vol_df.csv')
     tank_df = tank_count()
     # vol_df = vol_df.dropna()
     # vol_df = vol_df.dropna(subset=['oil'])
-    df = map_tag(vol_df, tag_df)
-    #
+    df = map_tag(df, tag_df)
+
     tank_df = tank_merge(df, tank_df)
     match_df = tank_df[tank_df['tankcnt'] == tank_df['TankCount']]
+
+    gwr_df = df[df['Facilitykey'].isin(match_df['Facilitykey'])]
+    best_tanks(gwr_df)
 
     # off_by_date(df)
 
