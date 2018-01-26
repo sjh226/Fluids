@@ -766,6 +766,19 @@ def best_tanks(best_df):
     for facility in df['Facilitykey'].unique():
         total_plot(df[df['Facilitykey'] == facility])
 
+def turbine_gwr_pull():
+    oracle_df = oracle_pull()
+    df = tank_split(df)
+    df.drop('total', axis=1, inplace=True)
+    df.dropna(inplace=True)
+    tag_df = tag_dict()
+    df = map_tag(df, tag_df)
+    tank_df = tank_count()
+    tank_df = tank_merge(df, tank_df)
+    match_df = tank_df[tank_df['tankcnt'] == tank_df['TankCount']]
+    gwr_df = df[df['Facilitykey'].isin(match_df['Facilitykey'])]
+    return gwr_df
+
 
 if __name__ == '__main__':
     # df = gwr_pull()
