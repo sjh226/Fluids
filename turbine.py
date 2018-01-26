@@ -4,6 +4,7 @@ import sys
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from ticket_match import turbine_gwr_pull
 
 
 def data_conn():
@@ -12,7 +13,7 @@ def data_conn():
 	cursor = connection.cursor()
 	query = ("""
 		SELECT  TAG_PREFIX
-				,TRUNC(TIME) AS my_date
+				,TRUNC(TIME) AS flow_date
 				,MAX(CTS_VC) AS volume
 		FROM DATA_QUALITY.PI_WAM_ALL_WELLS_OPS
 		WHERE CTS_VC IS NOT NULL
@@ -76,6 +77,14 @@ def tag_dict():
 
 	return df.drop_duplicates()
 
+def shift_volumes(df):
+	result_df = pd.DataFrame(columns=df.columns)
+	for tag in df['tag_prefix']:
+		tag_df = df[df['tag_prefix'] == tag]
+		tag_df.loc[:, 'volume'] = tag_df.loc[:, 'volume'].shift(-1)
+		result_df = result_df.append(tag_df)
+	return result_df
+
 def map_tag(vol, tag):
 	df = vol.merge(tag, on='tag_prefix', how='inner')
 	df = df.drop(['Unnamed: 0', 'tag_prefix', 'API'], axis=1)
@@ -102,13 +111,15 @@ def plot_rate(df):
 
 
 if __name__ == "__main__":
-	# df = data_conn()
+	df = data_conn()
+	df = shift_volumes(df)
 	# df.to_csv('data/turbine.csv')
 
-	vol_df = pd.read_csv('data/turbine.csv')
-	tag_df = tag_dict()
-	df = map_tag(vol_df, tag_df)
+	gwr_df = turbine_gwr_pull()
+	# vol_df = pd.read_csv('data/turbine.csv')
+	# tag_df = tag_dict()
+	# df = map_tag(vol_df, tag_df)
 
-	for facility in df['Facilitykey'].unique():
-		plot_rate(df[df['Facilitykey'] == facility])
+	# for facility in df['Facilitykey'].unique():
+	# 	plot_rate(df[df['Facilitykey'] == facility])
 		# break
