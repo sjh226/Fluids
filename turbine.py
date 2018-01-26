@@ -4,7 +4,7 @@ import sys
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from ticket_match import turbine_gwr_pull
+from gwr import turbine_gwr_pull
 
 
 def data_conn():
@@ -54,7 +54,6 @@ def tag_dict():
 		SELECT  PTD.TAG AS tag_prefix
 				,PTD.API
 				,DF.Facilitykey
-				,DF.FacilityCapacity
 		FROM [TeamOptimizationEngineering].[Reporting].[PITag_Dict] AS PTD
 		JOIN [TeamOptimizationEngineering].[dbo].[DimensionsWells] AS DW
 			ON PTD.API = DW.API
@@ -79,7 +78,7 @@ def tag_dict():
 
 def shift_volumes(df):
 	result_df = pd.DataFrame(columns=df.columns)
-	for tag in df['tag_prefix']:
+	for tag in df['tag_prefix'].unique():
 		tag_df = df[df['tag_prefix'] == tag]
 		tag_df.loc[:, 'volume'] = tag_df.loc[:, 'volume'].shift(-1)
 		result_df = result_df.append(tag_df)
@@ -109,13 +108,36 @@ def plot_rate(df):
 
 	plt.savefig('images/turbine/rate_{}.png'.format(facility))
 
+def turb_contr(gwr_df, turbine_df):
+	g_df = gwr_df[gwr_df['Facilitykey'] == 52]
+	t_df = turbine_df[turbine_df['Facilitykey'] == 52]
+
+	g_df = g_df[['Facilitykey', 'time', 'FacilityName', 'tag_prefix', 'water', 'oil']]
+	g_df['time'] = pd.DatetimeIndex(g_df['time']).normalize()
+	g_df = g_df.groupby(['Facilitykey', 'FacilityName', 'tag_prefix', 'time'], as_index=False).median()
+	return g_df
+
 
 if __name__ == "__main__":
-	df = data_conn()
-	df = shift_volumes(df)
+	# df = data_conn()
+	# df = shift_volumes(df)
 	# df.to_csv('data/turbine.csv')
+	df = pd.read_csv('data/turbine.csv')
 
-	gwr_df = turbine_gwr_pull()
+	# gwr_df = turbine_gwr_pull()
+	# gwr_df.to_csv('data/turbine_gwr.csv')
+	gwr_df = pd.read_csv('data/turbine_gwr.csv')
+
+	tag_df = tag_dict()
+	turbine_df = df.merge(tag_df, on='tag_prefix', how='inner')
+	g_df = turb_contr(gwr_df, turbine_df)
+
+	this = turbine_df[['API', 'Facilitykey']]
+	that = this.groupby('Facilitykey')['API'].nunique()
+	for fac in that[that > 5].index:
+		if fac in gwr_df['Facilitykey'].values and fac in turbine_df['Facilitykey'].values:
+			print('YES! at: ', fac)
+
 	# vol_df = pd.read_csv('data/turbine.csv')
 	# tag_df = tag_dict()
 	# df = map_tag(vol_df, tag_df)

@@ -768,7 +768,7 @@ def best_tanks(best_df):
 
 def turbine_gwr_pull():
     oracle_df = oracle_pull()
-    df = tank_split(df)
+    df = tank_split(oracle_df)
     df.drop('total', axis=1, inplace=True)
     df.dropna(inplace=True)
     tag_df = tag_dict()
