@@ -35,6 +35,7 @@ def lgr_pull():
         JOIN [TeamOptimizationEngineering].[dbo].[DimensionsWells] AS DW
         	ON LGR.FacilityKey = DW.FacilityKey
         WHERE LGR.PredictionMethod = 'LGRv4'
+            AND LGR.BusinessUnit = 'North'
         GROUP BY LGR.FacilityKey, LGR.FacilityName, LGR.FacilityCapacity, LGR.CalcDate, LGR.PredictionMethod;
     """)
 
@@ -241,6 +242,7 @@ def gauge_pull():
         DROP TABLE IF EXISTS #Tanks
 
         SELECT	F.Facilitykey
+                ,F.TankCount
         		,GD.tankCode
         		,GD.gaugeDate
                 ,F.FacilityCapacity
@@ -253,16 +255,20 @@ def gauge_pull():
         	ON T.TankCode = GD.tankCode
         JOIN OperationsDataMart.Dimensions.Facilities AS F
             ON F.Facilitykey = T.Facilitykey
+        WHERE F.BusinessUnit = 'North'
         ORDER BY T.Facilitykey, GD.gaugeDate;
 
         SELECT	Facilitykey
+                ,TankCount
         		,CAST(gaugeDate AS DATE) AS gaugeDate
                 ,FacilityCapacity
         		,SUM(oil) AS total_oil
         		,SUM(water) AS total_water
+                ,COUNT(*) AS tanks
         FROM #Tanks
         WHERE oil IS NOT NULL
-        GROUP BY Facilitykey, FacilityCapacity, CAST(gaugeDate AS DATE)
+        GROUP BY Facilitykey, TankCount, FacilityCapacity, CAST(gaugeDate AS DATE)
+        HAVING COUNT(*) = TankCount
         ORDER BY Facilitykey, CAST(gaugeDate AS DATE);
     """)
 
@@ -373,11 +379,32 @@ def lgr_over(df):
     plt.legend((v2[0], v4[0]), ('Version 2', 'Version 4'))
     plt.savefig('images/lgr_over_version.png')
 
+def match_gauge(lgr, gauge):
+    lgr.loc[:, 'Date'] = lgr['CalcDate']
+    lgr = lgr[['FacilityKey', 'FacilityName', 'Date', 'LGROil', 'LGRWater', 'PredictionMethod']]
+    gauge['Date'] = gauge['gaugeDate']
+    gauge['FacilityKey'] = gauge['Facilitykey']
+    gauge = gauge[['FacilityKey', 'Date', 'total_oil', 'total_water']]
+    df = lgr.merge(gauge, on=['FacilityKey', 'Date'], how='inner')
+    df['total_oil'] = df['total_oil'].astype(float)
+    df['off_oil'] = abs(df['LGROil'] - df['total_oil'])
+    return df
+
+def facility_error(df):
+    off_dic = {}
+    for fac in df['FacilityKey'].unique():
+        off_dic[fac] = df[df['FacilityKey'] == fac]['off_oil'].sum()
+    off_df = pd.DataFrame.from_records(list(off_dic.items()), columns=['facility', 'delta_oil'])
+    return off_df
+
 
 if __name__ == '__main__':
     df_lgr = lgr_pull()
     # df_gwr = gwr_pull()
     gauge_df = gauge_pull()
+
+    df = match_gauge(df_lgr, gauge_df)
+    off_df = facility_error(df)
 
     # df_lgr.to_csv('data/lgr.csv')
     # df_gwr.to_csv('data/gwr.csv')
@@ -387,9 +414,9 @@ if __name__ == '__main__':
     # df_gwr = pd.read_csv('data/gwr.csv')
     # gauge_df = pd.read_csv('data/gauges.csv')
 
-    for facility in sorted(df_lgr['FacilityKey'].unique()):
-        lgr_gauge_plot(df_lgr[df_lgr['FacilityKey'] == facility].sort_values('CalcDate'), \
-                       gauge_df[gauge_df['Facilitykey'] == facility].sort_values('gaugeDate'))
+    # for facility in sorted(df_lgr['FacilityKey'].unique()):
+    #     lgr_gauge_plot(df_lgr[df_lgr['FacilityKey'] == facility].sort_values('CalcDate'), \
+    #                    gauge_df[gauge_df['Facilitykey'] == facility].sort_values('gaugeDate'))
         # break
 
     # plot_lgr(df_lgr[(df_lgr['LGROil'] <= df_lgr['FacilityCapacity']) & \
