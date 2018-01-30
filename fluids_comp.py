@@ -29,24 +29,15 @@ def lgr_pull():
         JOIN (SELECT	FacilityKey
         				,MAX(CalcDate) maxtime
         		FROM [TeamOptimizationEngineering].[dbo].[InventoryAll_Calculated]
-        		GROUP BY FacilityKey, DAY(CalcDate), MONTH(CalcDate), YEAR(CalcDate)) AS MD
+        		GROUP BY FacilityKey, CAST(CalcDate AS DATE)) AS MD
         	ON	MD.FacilityKey = LGR.FacilityKey
         	AND	MD.maxtime = LGR.CalcDate
         JOIN [TeamOptimizationEngineering].[dbo].[DimensionsWells] AS DW
         	ON LGR.FacilityKey = DW.FacilityKey
-        WHERE LGR.PredictionMethod = 'LGRv4'
-            AND LGR.BusinessUnit = 'North'
+        WHERE LGR.BusinessUnit = 'North'
+            --AND LGR.PredictionMethod = 'LGRv4'
         GROUP BY LGR.FacilityKey, LGR.FacilityName, LGR.FacilityCapacity, LGR.CalcDate, LGR.PredictionMethod;
     """)
-
-    # WHERE	LGR.FacilityKey IN (
-	# 	SELECT FacilityKey
-	# 	FROM [TeamOptimizationEngineering].[dbo].[InventoryAll]
-	# 	GROUP BY FacilityKey
-	# 	HAVING	SUM(TotalOilOnSite) > 0
-	# 		AND	SUM(TotalWaterOnSite) > 0
-	# 		AND CAST(MAX(CalcDate) AS DATE) = CAST(GETDATE() AS DATE)
-	# 		AND COUNT(*) >= 31)
 
     cursor.execute(SQLCommand)
     results = cursor.fetchall()
@@ -380,22 +371,29 @@ def lgr_over(df):
     plt.savefig('images/lgr_over_version.png')
 
 def match_gauge(lgr, gauge):
-    lgr.loc[:, 'Date'] = lgr['CalcDate']
+    lgr['Date'] = lgr['CalcDate']
     lgr = lgr[['FacilityKey', 'FacilityName', 'Date', 'LGROil', 'LGRWater', 'PredictionMethod']]
     gauge['Date'] = gauge['gaugeDate']
     gauge['FacilityKey'] = gauge['Facilitykey']
     gauge = gauge[['FacilityKey', 'Date', 'total_oil', 'total_water']]
-    df = lgr.merge(gauge, on=['FacilityKey', 'Date'], how='inner')
+    df = lgr.merge(gauge, on=['FacilityKey', 'Date'], how='left')
     df['total_oil'] = df['total_oil'].astype(float)
     df['off_oil'] = abs(df['LGROil'] - df['total_oil'])
     return df
 
 def facility_error(df):
-    off_dic = {}
+    return_df = pd.DataFrame(columns=['FacilityKey', 'FacilityName', \
+                                      'delta_oil', 'average_delta', 'PredictionMethod'])
     for fac in df['FacilityKey'].unique():
-        off_dic[fac] = df[df['FacilityKey'] == fac]['off_oil'].sum()
-    off_df = pd.DataFrame.from_records(list(off_dic.items()), columns=['facility', 'delta_oil'])
-    return off_df
+        pred = max(df[df['FacilityKey'] == fac]['PredictionMethod'].unique())
+        fac_df = df[(df['FacilityKey'] == fac) & (df['PredictionMethod'] == pred)]
+        return_df = return_df.append({'FacilityKey':fac, \
+                                      'FacilityName':fac_df['FacilityName'].unique()[0], \
+                                      'delta_oil':fac_df['off_oil'].sum(), \
+                                      'average_delta':fac_df['off_oil'].mean(), \
+                                      'PredictionMethod':pred}, \
+                                      ignore_index=True)
+    return return_df.sort_values('average_delta')
 
 
 if __name__ == '__main__':
