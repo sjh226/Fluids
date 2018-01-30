@@ -54,12 +54,13 @@ def tag_dict():
 		SELECT  PTD.TAG AS tag_prefix
 				,PTD.API
 				,DF.Facilitykey
+				,DF.FacilityName
 		FROM [TeamOptimizationEngineering].[Reporting].[PITag_Dict] AS PTD
 		JOIN [TeamOptimizationEngineering].[dbo].[DimensionsWells] AS DW
 			ON PTD.API = DW.API
 		JOIN [TeamOptimizationEngineering].[dbo].[DimensionsFacilities] AS DF
 			ON DW.Facilitykey = DF.Facilitykey
-		GROUP BY PTD.TAG, PTD.API, DF.Facilitykey, DF.FacilityCapacity;
+		GROUP BY PTD.TAG, PTD.API, DF.Facilitykey, DF.FacilityName, DF.FacilityCapacity;
 	""")
 
 	cursor.execute(SQLCommand)
@@ -124,19 +125,19 @@ if __name__ == "__main__":
 	# df.to_csv('data/turbine.csv')
 	df = pd.read_csv('data/turbine.csv')
 
-	# gwr_df = turbine_gwr_pull()
-	# gwr_df.to_csv('data/turbine_gwr.csv')
+	gwr_df, temp_df = turbine_gwr_pull()
+	gwr_df.to_csv('data/turbine_gwr.csv')
 	gwr_df = pd.read_csv('data/turbine_gwr.csv')
 
 	tag_df = tag_dict()
 	turbine_df = df.merge(tag_df, on='tag_prefix', how='inner')
 	g_df = turb_contr(gwr_df, turbine_df)
 
-	this = turbine_df[['API', 'Facilitykey']]
-	that = this.groupby('Facilitykey')['API'].nunique()
-	for fac in that[that > 5].index:
-		if fac in gwr_df['Facilitykey'].values and fac in turbine_df['Facilitykey'].values:
-			print('YES! at: ', fac)
+	# this = turbine_df[['API', 'Facilitykey']]
+	# that = this.groupby('Facilitykey')['API'].nunique()
+	# for fac in that[that > 5].index:
+	# 	if fac in gwr_df['Facilitykey'].values and fac in turbine_df['Facilitykey'].values:
+	# 		print('YES! at: ', fac)
 
 	# vol_df = pd.read_csv('data/turbine.csv')
 	# tag_df = tag_dict()
