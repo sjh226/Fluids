@@ -110,10 +110,16 @@ def plot_rate(df):
 	plt.savefig('images/turbine/rate_{}.png'.format(facility))
 
 def turb_contr(gwr_df, turbine_df):
-	g_df = gwr_df[gwr_df['Facilitykey'] == 52]
-	t_df = turbine_df[turbine_df['Facilitykey'] == 52]
+	tag_list = ['WAM-ML11_150H-150H', 'WAM-ML11_150H-155H', \
+				'WAM-ML11_160H-160H', 'WAM-ML11_160H-165H', \
+				'WAM-ML11_160D-160D', 'WAM-BB19_80H', 'WAM-CL29_150H-150H', \
+				'WAM-CL29_150H-155H', 'WAM-CH320C1-160H', 'WAM-HP13_150H-150H', \
+				'WAM-HP13_150H-155H', 'WAM-CL29_160H-160H', \
+				'WAM-CL29_160H-165H', 'WAM-LM8_115H-115H']
+	g_df = gwr_df[gwr_df['Facilitykey'].isin(tag_list)]
+	t_df = turbine_df[turbine_df['Facilitykey'].isin(tag_list)]
 
-	g_df = g_df[['Facilitykey', 'time', 'FacilityName', 'tag_prefix', 'water', 'oil']]
+	g_df = gwr_df[['Facilitykey', 'time', 'FacilityName', 'tag_prefix', 'water', 'oil']]
 	g_df['time'] = pd.DatetimeIndex(g_df['time']).normalize()
 	g_df = g_df.groupby(['Facilitykey', 'FacilityName', 'tag_prefix', 'time'], as_index=False).median()
 	return g_df
@@ -125,8 +131,8 @@ if __name__ == "__main__":
 	# df.to_csv('data/turbine.csv')
 	df = pd.read_csv('data/turbine.csv')
 
-	gwr_df, temp_df = turbine_gwr_pull()
-	gwr_df.to_csv('data/turbine_gwr.csv')
+	# gwr_df, tank_df = turbine_gwr_pull()
+	# gwr_df.to_csv('data/turbine_gwr.csv')
 	gwr_df = pd.read_csv('data/turbine_gwr.csv')
 
 	tag_df = tag_dict()

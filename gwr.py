@@ -777,7 +777,7 @@ def turbine_gwr_pull():
     tank_df = tank_merge(gwr_df, tank_df)
     match_df = tank_df[tank_df['tankcnt'] == tank_df['TankCount']]
     # gwr_df = df[df['Facilitykey'].isin(match_df['Facilitykey'])]
-    return gwr_df, df
+    return gwr_df, tank_df
 
 
 if __name__ == '__main__':
