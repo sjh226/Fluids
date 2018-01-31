@@ -116,13 +116,24 @@ def turb_contr(gwr_df, turbine_df):
 				'WAM-CL29_150H-155H', 'WAM-CH320C1-160H', 'WAM-HP13_150H-150H', \
 				'WAM-HP13_150H-155H', 'WAM-CL29_160H-160H', \
 				'WAM-CL29_160H-165H', 'WAM-LM8_115H-115H']
-	g_df = gwr_df[gwr_df['Facilitykey'].isin(tag_list)]
-	t_df = turbine_df[turbine_df['Facilitykey'].isin(tag_list)]
+	g_df = gwr_df[gwr_df['tag_prefix'].isin(tag_list)]
+	t_df = turbine_df[turbine_df['tag_prefix'].isin(tag_list)]
 
-	g_df = gwr_df[['Facilitykey', 'time', 'FacilityName', 'tag_prefix', 'water', 'oil']]
+	g_df = g_df[['Facilitykey', 'time', 'FacilityName', 'tag_prefix', 'water', 'oil']]
 	g_df['time'] = pd.DatetimeIndex(g_df['time']).normalize()
 	g_df = g_df.groupby(['Facilitykey', 'FacilityName', 'tag_prefix', 'time'], as_index=False).median()
-	return g_df
+
+	t_df['time'] = pd.to_datetime(t_df['flow_date'])
+	t_df = t_df[['tag_prefix', 'time', 'volume', 'API']]
+	# print(g_df['tag_prefix'].unique())
+	# print(t_df['tag_prefix'].unique())
+	# print(g_df.sort_values(['tag_prefix', 'time']).head(10))
+	# print(t_df[t_df['time'] >= '2017-12-08'].sort_values(['tag_prefix', 'time']).head(10))
+	# print(g_df.info())
+	# print(t_df.info())
+
+	df = g_df.merge(t_df, on=['tag_prefix', 'time'])
+	return df
 
 
 if __name__ == "__main__":
