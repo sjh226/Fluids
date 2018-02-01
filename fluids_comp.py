@@ -34,7 +34,7 @@ def lgr_pull():
         	AND	MD.maxtime = LGR.CalcDate
         JOIN [TeamOptimizationEngineering].[dbo].[DimensionsWells] AS DW
         	ON LGR.FacilityKey = DW.FacilityKey
-        WHERE LGR.BusinessUnit = 'North'
+        WHERE LGR.BusinessUnit = 'West'
             --AND LGR.PredictionMethod = 'LGRv4'
         GROUP BY LGR.FacilityKey, LGR.FacilityName, LGR.FacilityCapacity, LGR.CalcDate, LGR.PredictionMethod;
     """)
@@ -403,9 +403,9 @@ def facility_error(df):
 
 
 if __name__ == '__main__':
-    # df_lgr = lgr_pull()
+    df_lgr = lgr_pull()
     # df_lgr.to_csv('data/lgr.csv')
-    df_lgr = pd.read_csv('data/lgr.csv')
+    # df_lgr = pd.read_csv('data/lgr.csv')
 
     # df_gwr = gwr_pull()
     gauge_df = gauge_pull()
