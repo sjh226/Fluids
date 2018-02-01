@@ -110,14 +110,15 @@ def plot_rate(df):
 	plt.savefig('images/turbine/rate_{}.png'.format(facility))
 
 def turb_contr(gwr_df, turbine_df):
-	tag_list = ['WAM-ML11_150H-150H', 'WAM-ML11_150H-155H', \
-				'WAM-ML11_160H-160H', 'WAM-ML11_160H-165H', \
-				'WAM-ML11_160D-160D', 'WAM-BB19_80H', 'WAM-CL29_150H-150H', \
-				'WAM-CL29_150H-155H', 'WAM-CH320C1-160H', 'WAM-HP13_150H-150H', \
-				'WAM-HP13_150H-155H', 'WAM-CL29_160H-160H', \
-				'WAM-CL29_160H-165H', 'WAM-LM8_115H-115H']
-	g_df = gwr_df[gwr_df['tag_prefix'].isin(tag_list)]
-	t_df = turbine_df[turbine_df['tag_prefix'].isin(tag_list)]
+	tag_list = ['WAM-ML11_150H', 'WAM-ML11_150H', \
+				'WAM-ML11_160H', 'WAM-ML11_160H', \
+				'WAM-ML11_160D', 'WAM-BB19', 'WAM-CL29_150H', \
+				'WAM-CL29_150H', 'WAM-CH320C1', 'WAM-HP13_150H', \
+				'WAM-HP13_150H', 'WAM-CL29_160H', \
+				'WAM-CL29_160H', 'WAM-LM8_115H']
+	g_df = gwr_df[gwr_df['tag_prefix'].str.contains('|'.join(tag_list))]
+	print(g_df['tag_prefix'].unique())
+	t_df = turbine_df[turbine_df['tag_prefix'].str.contains('|'.join(tag_list))]
 
 	g_df = g_df[['Facilitykey', 'time', 'FacilityName', 'tag_prefix', 'water', 'oil']]
 	g_df['time'] = pd.DatetimeIndex(g_df['time']).normalize()
@@ -125,8 +126,8 @@ def turb_contr(gwr_df, turbine_df):
 
 	t_df['time'] = pd.to_datetime(t_df['flow_date'])
 	t_df = t_df[['tag_prefix', 'time', 'volume', 'API']]
-	# print(g_df['tag_prefix'].unique())
-	# print(t_df['tag_prefix'].unique())
+
+	print(t_df['tag_prefix'].unique())
 	# print(g_df.sort_values(['tag_prefix', 'time']).head(10))
 	# print(t_df[t_df['time'] >= '2017-12-08'].sort_values(['tag_prefix', 'time']).head(10))
 	# print(g_df.info())
@@ -137,13 +138,13 @@ def turb_contr(gwr_df, turbine_df):
 
 
 if __name__ == "__main__":
-	# df = data_conn()
-	# df = shift_volumes(df)
-	# df.to_csv('data/turbine.csv')
+	df = data_conn()
+	df = shift_volumes(df)
+	df.to_csv('data/turbine.csv')
 	df = pd.read_csv('data/turbine.csv')
 
-	# gwr_df, tank_df = turbine_gwr_pull()
-	# gwr_df.to_csv('data/turbine_gwr.csv')
+	gwr_df, tank_df = turbine_gwr_pull()
+	gwr_df.to_csv('data/turbine_gwr.csv')
 	gwr_df = pd.read_csv('data/turbine_gwr.csv')
 
 	tag_df = tag_dict()
