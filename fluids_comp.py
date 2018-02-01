@@ -371,7 +371,7 @@ def lgr_over(df):
     plt.savefig('images/lgr_over_version.png')
 
 def match_gauge(lgr, gauge):
-    lgr['Date'] = lgr['CalcDate']
+    lgr['Date'] = pd.to_datetime(lgr['CalcDate']) + pd.Timedelta('1 days')
     lgr = lgr[['FacilityKey', 'FacilityName', 'Date', 'LGROil', 'LGRWater', 'PredictionMethod']]
     gauge['Date'] = gauge['gaugeDate']
     gauge['FacilityKey'] = gauge['Facilitykey']
@@ -379,11 +379,15 @@ def match_gauge(lgr, gauge):
     df = lgr.merge(gauge, on=['FacilityKey', 'Date'], how='left')
     df['total_oil'] = df['total_oil'].astype(float)
     df['off_oil'] = abs(df['LGROil'] - df['total_oil'])
+    df['per_off'] = abs(df['LGROil'] / df['total_oil'])
+    df['per_acc'] = abs(df['total_oil'] - df['LGROil'])/df['total_oil']
+    # df['per_off'] = np.where(df['per_off'] <= 1, df['per_off'], 1 - (df['per_off'] - 1))
     return df
 
 def facility_error(df):
     return_df = pd.DataFrame(columns=['FacilityKey', 'FacilityName', \
-                                      'delta_oil', 'average_delta', 'PredictionMethod'])
+                                      'delta_oil', 'average_delta', \
+                                      'perc_diff', 'perc_acc', 'PredictionMethod'])
     for fac in df['FacilityKey'].unique():
         pred = max(df[df['FacilityKey'] == fac]['PredictionMethod'].unique())
         fac_df = df[(df['FacilityKey'] == fac) & (df['PredictionMethod'] == pred)]
@@ -391,13 +395,18 @@ def facility_error(df):
                                       'FacilityName':fac_df['FacilityName'].unique()[0], \
                                       'delta_oil':fac_df['off_oil'].sum(), \
                                       'average_delta':fac_df['off_oil'].mean(), \
+                                      'perc_diff':fac_df['per_off'].mean(), \
+                                      'perc_acc':fac_df['per_acc'].mean(), \
                                       'PredictionMethod':pred}, \
                                       ignore_index=True)
     return return_df.sort_values('average_delta')
 
 
 if __name__ == '__main__':
-    df_lgr = lgr_pull()
+    # df_lgr = lgr_pull()
+    # df_lgr.to_csv('data/lgr.csv')
+    df_lgr = pd.read_csv('data/lgr.csv')
+
     # df_gwr = gwr_pull()
     gauge_df = gauge_pull()
 
