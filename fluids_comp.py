@@ -246,7 +246,7 @@ def gauge_pull():
         	ON T.TankCode = GD.tankCode
         JOIN OperationsDataMart.Dimensions.Facilities AS F
             ON F.Facilitykey = T.Facilitykey
-        WHERE F.BusinessUnit = 'North'
+        WHERE F.BusinessUnit = 'West'
         ORDER BY T.Facilitykey, GD.gaugeDate;
 
         SELECT	Facilitykey
