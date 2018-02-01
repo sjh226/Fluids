@@ -776,10 +776,11 @@ def turbine_gwr_pull():
 	tank_df = tank_count()
 	tank_df = tank_merge(gwr_df, tank_df)
 	tag_list = ['WAM-ML11_150H', 'WAM-ML11_160H', 'WAM-BB19', 'WAM-CL29_150H', \
-                'WAM-CH320C1', 'WAM-HP13_150H', 'WAM-HP13_150H', \
-                'WAM-CL29_160H', 'WAM-LM8_115H']
+				'WAM-CH320C1', 'WAM-HP13_150H', 'WAM-HP13_150H', \
+				'WAM-CL29_160H', 'WAM-LM8_115H']
 	match_df = tank_df[tank_df['tankcnt'] == tank_df['TankCount']]
 	# gwr_df = df[df['Facilitykey'].isin(match_df['Facilitykey'])]
+	print(gwr_df[gwr_df['tag_prefix'].str.contains('|'.join(tag_list))])
 	return gwr_df, tank_df
 
 
