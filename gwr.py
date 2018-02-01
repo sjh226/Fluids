@@ -661,7 +661,7 @@ def oracle_pull():
 def map_tag(vol, tag):
 	df = vol.merge(tag, on='tag_prefix', how='left')
 	# df = df.drop(['tag_prefix', 'API'], axis=1)
-	df = df.dropna()
+	# df = df.dropna()
 	df['oil_rate'] = df['oil'] - df['oil'].shift(1)
 	df.loc[df['oil_rate'] < 0, 'oil_rate'] = np.nan
 	df['oil_rate']
@@ -770,17 +770,14 @@ def turbine_gwr_pull():
 	oracle_df = oracle_pull()
 	df = tank_split(oracle_df)
 	df.drop('total', axis=1, inplace=True)
-	df.dropna(inplace=True)
+	# df.dropna(inplace=True)
 	tag_df = tag_dict()
 	gwr_df = map_tag(df, tag_df)
 	tank_df = tank_count()
 	tank_df = tank_merge(gwr_df, tank_df)
-	tag_list = ['WAM-ML11_150H-150H', 'WAM-ML11_150H-155H', \
-				'WAM-ML11_160H-160H', 'WAM-ML11_160H-165H', \
-				'WAM-ML11_160D-160D', 'WAM-BB19_80H', 'WAM-CL29_150H-150H', \
-				'WAM-CL29_150H-155H', 'WAM-CH320C1-160H', 'WAM-HP13_150H-150H', \
-				'WAM-HP13_150H-155H', 'WAM-CL29_160H-160H', \
-				'WAM-CL29_160H-165H', 'WAM-LM8_115H-115H']
+	tag_list = ['WAM-ML11_150H', 'WAM-ML11_160H', 'WAM-BB19', 'WAM-CL29_150H', \
+                'WAM-CH320C1', 'WAM-HP13_150H', 'WAM-HP13_150H', \
+                'WAM-CL29_160H', 'WAM-LM8_115H']
 	match_df = tank_df[tank_df['tankcnt'] == tank_df['TankCount']]
 	# gwr_df = df[df['Facilitykey'].isin(match_df['Facilitykey'])]
 	return gwr_df, tank_df
@@ -788,7 +785,7 @@ def turbine_gwr_pull():
 
 if __name__ == '__main__':
 	# # df = gwr_pull()
-	# # oracle_df = oracle_pull()
+	# oracle_df = oracle_pull()
 	# tag_df = tag_dict()
 	# # oracle_df.to_csv('data/oracle_gwr.csv')
 	# # df.to_csv('data/full_gwr.csv')

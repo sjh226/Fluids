@@ -34,7 +34,7 @@ def lgr_pull():
         	AND	MD.maxtime = LGR.CalcDate
         JOIN [TeamOptimizationEngineering].[dbo].[DimensionsWells] AS DW
         	ON LGR.FacilityKey = DW.FacilityKey
-        WHERE LGR.BusinessUnit = 'North'
+        WHERE LGR.BusinessUnit = 'West'
             --AND LGR.PredictionMethod = 'LGRv4'
         GROUP BY LGR.FacilityKey, LGR.FacilityName, LGR.FacilityCapacity, LGR.CalcDate, LGR.PredictionMethod;
     """)
@@ -246,7 +246,7 @@ def gauge_pull():
         	ON T.TankCode = GD.tankCode
         JOIN OperationsDataMart.Dimensions.Facilities AS F
             ON F.Facilitykey = T.Facilitykey
-        WHERE F.BusinessUnit = 'North'
+        WHERE F.BusinessUnit = 'West'
         ORDER BY T.Facilitykey, GD.gaugeDate;
 
         SELECT	Facilitykey
@@ -396,16 +396,16 @@ def facility_error(df):
                                       'delta_oil':fac_df['off_oil'].sum(), \
                                       'average_delta':fac_df['off_oil'].mean(), \
                                       'perc_diff':fac_df['per_off'].mean(), \
-                                      'perc_acc':fac_df['per_acc'].mean(), \
+                                      'perc_acc':fac_df['per_acc'].min(), \
                                       'PredictionMethod':pred}, \
                                       ignore_index=True)
     return return_df.sort_values('average_delta')
 
 
 if __name__ == '__main__':
-    # df_lgr = lgr_pull()
+    df_lgr = lgr_pull()
     # df_lgr.to_csv('data/lgr.csv')
-    df_lgr = pd.read_csv('data/lgr.csv')
+    # df_lgr = pd.read_csv('data/lgr.csv')
 
     # df_gwr = gwr_pull()
     gauge_df = gauge_pull()
