@@ -396,7 +396,7 @@ def facility_error(df):
                                       'delta_oil':fac_df['off_oil'].sum(), \
                                       'average_delta':fac_df['off_oil'].mean(), \
                                       'perc_diff':fac_df['per_off'].mean(), \
-                                      'perc_acc':fac_df['per_acc'].mean(), \
+                                      'perc_acc':fac_df['per_acc'].min(), \
                                       'PredictionMethod':pred}, \
                                       ignore_index=True)
     return return_df.sort_values('average_delta')
