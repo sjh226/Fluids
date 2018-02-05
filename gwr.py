@@ -780,7 +780,6 @@ def turbine_gwr_pull():
 				'WAM-CL29_160H', 'WAM-LM8_115H']
 	match_df = tank_df[tank_df['tankcnt'] == tank_df['TankCount']]
 	# gwr_df = df[df['Facilitykey'].isin(match_df['Facilitykey'])]
-	print(gwr_df[gwr_df['tag_prefix'].str.contains('|'.join(tag_list))])
 	return gwr_df, tank_df
 
 
