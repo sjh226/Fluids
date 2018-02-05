@@ -34,7 +34,7 @@ def lgr_pull():
         	AND	MD.maxtime = LGR.CalcDate
         JOIN [TeamOptimizationEngineering].[dbo].[DimensionsWells] AS DW
         	ON LGR.FacilityKey = DW.FacilityKey
-        WHERE LGR.BusinessUnit = 'West'
+        WHERE LGR.BusinessUnit = 'North'
             --AND LGR.PredictionMethod = 'LGRv4'
         GROUP BY LGR.FacilityKey, LGR.FacilityName, LGR.FacilityCapacity, LGR.CalcDate, LGR.PredictionMethod;
     """)
@@ -246,7 +246,7 @@ def gauge_pull():
         	ON T.TankCode = GD.tankCode
         JOIN OperationsDataMart.Dimensions.Facilities AS F
             ON F.Facilitykey = T.Facilitykey
-        WHERE F.BusinessUnit = 'West'
+        WHERE F.BusinessUnit = 'North'
         ORDER BY T.Facilitykey, GD.gaugeDate;
 
         SELECT	Facilitykey
@@ -380,14 +380,14 @@ def match_gauge(lgr, gauge):
     df['total_oil'] = df['total_oil'].astype(float)
     df['off_oil'] = abs(df['LGROil'] - df['total_oil'])
     df['per_off'] = abs(df['LGROil'] / df['total_oil'])
-    df['per_acc'] = abs(df['total_oil'] - df['LGROil'])/df['total_oil']
+    df['per_err'] = (abs(df['total_oil'] - df['LGROil'])/df['total_oil']) * 100
     # df['per_off'] = np.where(df['per_off'] <= 1, df['per_off'], 1 - (df['per_off'] - 1))
     return df
 
 def facility_error(df):
     return_df = pd.DataFrame(columns=['FacilityKey', 'FacilityName', \
                                       'delta_oil', 'average_delta', \
-                                      'perc_diff', 'perc_acc', 'PredictionMethod'])
+                                      'perc_diff', 'per_err', 'PredictionMethod'])
     for fac in df['FacilityKey'].unique():
         pred = max(df[df['FacilityKey'] == fac]['PredictionMethod'].unique())
         fac_df = df[(df['FacilityKey'] == fac) & (df['PredictionMethod'] == pred)]
@@ -396,7 +396,7 @@ def facility_error(df):
                                       'delta_oil':fac_df['off_oil'].sum(), \
                                       'average_delta':fac_df['off_oil'].mean(), \
                                       'perc_diff':fac_df['per_off'].mean(), \
-                                      'perc_acc':fac_df['per_acc'].min(), \
+                                      'per_err':fac_df['per_err'].mean(), \
                                       'PredictionMethod':pred}, \
                                       ignore_index=True)
     return return_df.sort_values('average_delta')
