@@ -55,6 +55,49 @@ def lgr_pull():
 
     return df.drop_duplicates()
 
+def spill_pull():
+    try:
+        connection = pyodbc.connect(r'Driver={SQL Server Native Client 11.0};'
+                                    r'Server=SQLDW-L48.BP.Com;'
+                                    r'Database=OperationsDataMart;'
+                                    r'trusted_connection=yes'
+                                    )
+    except pyodbc.Error:
+    	print("Connection Error")
+    	sys.exit()
+
+    cursor = connection.cursor()
+    SQLCommand = ("""
+        SELECT FI.Facilitykey AS FacilityKey
+              ,FI.FacilityName
+              ,FI.DateKey AS Date
+              ,FI.LastGaugeDate
+              ,FI.DaysSinceLastGauge
+              ,FI.Oil
+              ,FI.Water
+          FROM [OperationsDataMart].[Reporting].[FacilityInventory] AS FI
+          WHERE FI.Asset = 'West'
+          GROUP BY FI.Facilitykey, FI.FacilityName, FI.DateKey,
+                   FI.LastGaugeDate, FI.DaysSinceLastGauge, FI.Oil, FI.Water
+          ORDER BY FI.Facilitykey, FI.DateKey
+    """)
+
+    cursor.execute(SQLCommand)
+    results = cursor.fetchall()
+
+    df = pd.DataFrame.from_records(results)
+    connection.close()
+
+    try:
+    	df.columns = pd.DataFrame(np.matrix(cursor.description))[0]
+    except:
+    	df = None
+    	print('Dataframe is empty')
+
+    df['Date'] = pd.to_datetime(df['Date'])
+
+    return df.drop_duplicates()
+
 def bad_gauge_pull():
     try:
         connection = pyodbc.connect(r'Driver={SQL Server Native Client 11.0};'
@@ -372,7 +415,7 @@ def lgr_over(df):
 
 def match_gauge(lgr, gauge):
     lgr['Date'] = pd.to_datetime(lgr['CalcDate']) + pd.Timedelta('1 days')
-    lgr = lgr[['FacilityKey', 'FacilityName', 'Date', 'LGROil', 'LGRWater', 'PredictionMethod']]
+    lgr = lgr[['Facilitykey', 'FacilityName', 'Date', 'LGROil', 'LGRWater', 'PredictionMethod']]
     gauge['Date'] = gauge['gaugeDate']
     gauge['FacilityKey'] = gauge['Facilitykey']
     gauge = gauge[['FacilityKey', 'Date', 'total_oil', 'total_water']]
@@ -383,6 +426,30 @@ def match_gauge(lgr, gauge):
     df['per_err'] = (abs(df['total_oil'] - df['LGROil'])/df['total_oil']) * 100
     # df['per_off'] = np.where(df['per_off'] <= 1, df['per_off'], 1 - (df['per_off'] - 1))
     return df
+
+def spill_gauge(spill, gauge):
+    spill = spill[['FacilityKey', 'FacilityName', 'Date', 'Oil', 'Water']]
+    gauge['Date'] = gauge['gaugeDate']
+    gauge['FacilityKey'] = gauge['Facilitykey']
+    gauge = gauge[['FacilityKey', 'Date', 'total_oil', 'total_water']]
+    df = spill.merge(gauge, on=['FacilityKey', 'Date'], how='left')
+    df['total_oil'] = df['total_oil'].astype(float)
+    df['off_oil'] = abs(df['Oil'] - df['total_oil'])
+    df['per_off'] = abs(df['Oil'] / df['total_oil'])
+    df['per_err'] = (abs(df['total_oil'] - df['Oil'])/df['total_oil']) * 100
+    return_df = pd.DataFrame(columns=['FacilityKey', 'FacilityName', \
+                                      'delta_oil', 'average_delta', \
+                                      'perc_diff', 'per_err'])
+    for fac in df['FacilityKey'].unique():
+        fac_df = df[df['FacilityKey'] == fac]
+        return_df = return_df.append({'FacilityKey':fac, \
+                                      'FacilityName':fac_df['FacilityName'].unique()[0], \
+                                      'delta_oil':fac_df['off_oil'].sum(), \
+                                      'average_delta':fac_df['off_oil'].mean(), \
+                                      'perc_diff':fac_df['per_off'].mean(), \
+                                      'per_err':fac_df['per_err'].mean()}, \
+                                      ignore_index=True)
+    return return_df.sort_values('average_delta')
 
 def facility_error(df):
     return_df = pd.DataFrame(columns=['FacilityKey', 'FacilityName', \
@@ -403,15 +470,19 @@ def facility_error(df):
 
 
 if __name__ == '__main__':
-    df_lgr = lgr_pull()
+    # df_lgr = lgr_pull()
     # df_lgr.to_csv('data/lgr.csv')
     # df_lgr = pd.read_csv('data/lgr.csv')
+
+    df_spill = spill_pull()
 
     # df_gwr = gwr_pull()
     gauge_df = gauge_pull()
 
-    df = match_gauge(df_lgr, gauge_df)
-    off_df = facility_error(df)
+    off_df = spill_gauge(df_spill, gauge_df)
+
+    # df = match_gauge(df_lgr, gauge_df)
+    # off_df = facility_error(df)
 
     # df_lgr.to_csv('data/lgr.csv')
     # df_gwr.to_csv('data/gwr.csv')
