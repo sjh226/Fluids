@@ -110,46 +110,52 @@ def plot_rate(df):
 	plt.savefig('images/turbine/rate_{}.png'.format(facility))
 
 def turb_contr(gwr_df, turbine_df):
-	tag_list = ['WAM-ML11_150H', 'WAM-ML11_150H', \
-				'WAM-ML11_160H', 'WAM-ML11_160H', \
-				'WAM-ML11_160D', 'WAM-BB19', 'WAM-CL29_150H', \
+	tag_list = ['WAM-ML11_150H', 'WAM-ML11_160H', 'WAM-ML11_160D', 'WAM-BB19', \
 				'WAM-CL29_150H', 'WAM-CH320C1', 'WAM-HP13_150H', \
-				'WAM-HP13_150H', 'WAM-CL29_160H', \
 				'WAM-CL29_160H', 'WAM-LM8_115H']
 	g_df = gwr_df[gwr_df['tag_prefix'].str.contains('|'.join(tag_list))]
-	print(g_df['tag_prefix'].unique())
 	t_df = turbine_df[turbine_df['tag_prefix'].str.contains('|'.join(tag_list))]
 
-	g_df = g_df[['Facilitykey', 'time', 'FacilityName', 'tag_prefix', 'water', 'oil']]
+	g_df = g_df[['Facilitykey', 'time', 'FacilityName', 'water', 'oil']]
 	g_df['time'] = pd.DatetimeIndex(g_df['time']).normalize()
-	g_df = g_df.groupby(['Facilitykey', 'FacilityName', 'tag_prefix', 'time'], as_index=False).median()
+	g_df = g_df.groupby(['Facilitykey', 'FacilityName', 'time'], as_index=False).median()
 
-	t_df['time'] = pd.to_datetime(t_df['flow_date'])
-	t_df = t_df[['tag_prefix', 'time', 'volume', 'API']]
+	t_df.loc[:, 'time'] = pd.to_datetime(t_df['flow_date'])
+	t_df = t_df[['tag_prefix', 'FacilityName', 'time', 'volume', 'API']]
+	t_df.loc[:, 'contr'] = np.nan
+	t_df.loc[:, 'oil'] = np.nan
+	t_df.loc[:, 'water'] = np.nan
+	t_df = t_df[t_df['time'] >= g_df['time'].min()]
 
-	print(t_df['tag_prefix'].unique())
-	# print(g_df.sort_values(['tag_prefix', 'time']).head(10))
-	# print(t_df[t_df['time'] >= '2017-12-08'].sort_values(['tag_prefix', 'time']).head(10))
-	# print(g_df.info())
-	# print(t_df.info())
+	for fac in t_df['FacilityName'].unique():
+		for time in t_df[t_df['FacilityName'] == fac]['time']:
+			contr = t_df[(t_df['FacilityName'] == fac) & (t_df['time'] == time)]['volume'].sum()
+			t_df.loc[(t_df['FacilityName'] == fac) & (t_df['time'] == time), 'contr'] = contr
+			match_df = g_df[(g_df['FacilityName'] == fac) & (g_df['time'] == time)]
+			if len(match_df['oil'].values) > 0:
+				t_df.loc[(t_df['FacilityName'] == fac) & (t_df['time'] == time), 'oil'] = match_df['oil'].values[0]
+			if len(match_df['water'].values) > 0:
+				t_df.loc[(t_df['FacilityName'] == fac) & (t_df['time'] == time), 'water'] = match_df['water'].values[0]
 
-	df = g_df.merge(t_df, on=['tag_prefix', 'time'])
-	return df
+	t_df.loc[:, 'oil_diff'] = t_df['oil'] - t_df['oil'].shift(1)
+	t_df.loc[:, 'oil_contr'] = t_df['oil_diff'] * (t_df['volume'] / t_df['contr'])
+	return t_df
 
 
 if __name__ == "__main__":
-	df = data_conn()
-	df = shift_volumes(df)
-	df.to_csv('data/turbine.csv')
+	# df = data_conn()
+	# df = shift_volumes(df)
+	# df.to_csv('data/turbine.csv')
 	df = pd.read_csv('data/turbine.csv')
 
-	gwr_df, tank_df = turbine_gwr_pull()
-	gwr_df.to_csv('data/turbine_gwr.csv')
+	# gwr_df = turbine_gwr_pull()
+	# gwr_df.to_csv('data/turbine_gwr.csv')
 	gwr_df = pd.read_csv('data/turbine_gwr.csv')
 
 	tag_df = tag_dict()
 	turbine_df = df.merge(tag_df, on='tag_prefix', how='inner')
 	g_df = turb_contr(gwr_df, turbine_df)
+	g_df.to_csv('data/turbine_contribution.csv')
 
 	# this = turbine_df[['API', 'Facilitykey']]
 	# that = this.groupby('Facilitykey')['API'].nunique()
