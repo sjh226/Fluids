@@ -141,21 +141,46 @@ def turb_contr(gwr_df, turbine_df):
 	t_df.loc[:, 'oil_contr'] = t_df['oil_diff'] * (t_df['volume'] / t_df['contr'])
 	return t_df
 
+def plot_contr(df):
+	plt.close()
+	fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+
+	well = df['tag_prefix'].unique()[0].lstrip('WAM-')
+	pos_df = df
+	pos_df.loc[(pos_df['oil_contr'] < 0) | (pos_df['oil_contr'].isnull()), 'oil_contr'] = 0
+	pos_df = pos_df[pos_df['oil_contr'] > 0]
+
+	ax.plot(df['time'], df['volume'], color='black', label='Turbine Volume')
+	ax.plot(pos_df['time'], pos_df['oil_contr'], color='red', label='GWR with Turbine Contribution')
+
+	plt.xticks(rotation='vertical')
+	plt.xlabel('Date')
+	plt.ylabel('Oil Rate (bbl/day)')
+	plt.title('Turbine Contribution for {}'.format(well))
+	plt.legend()
+
+	plt.savefig('images/contributions/cont_{}.png'.format(well))
+
 
 if __name__ == "__main__":
 	# df = data_conn()
 	# df = shift_volumes(df)
 	# df.to_csv('data/turbine.csv')
-	df = pd.read_csv('data/turbine.csv')
+	# df = pd.read_csv('data/turbine.csv')
 
 	# gwr_df = turbine_gwr_pull()
 	# gwr_df.to_csv('data/turbine_gwr.csv')
-	gwr_df = pd.read_csv('data/turbine_gwr.csv')
+	# gwr_df = pd.read_csv('data/turbine_gwr.csv')
 
-	tag_df = tag_dict()
-	turbine_df = df.merge(tag_df, on='tag_prefix', how='inner')
-	g_df = turb_contr(gwr_df, turbine_df)
-	g_df.to_csv('data/turbine_contribution.csv')
+	# tag_df = tag_dict()
+	# turbine_df = df.merge(tag_df, on='tag_prefix', how='inner')
+	# g_df = turb_contr(gwr_df, turbine_df)
+	# g_df.to_csv('data/turbine_contribution.csv')
+
+	g_df = pd.read_csv('data/turbine_contribution.csv')
+	g_df['time'] = pd.to_datetime(g_df['time'])
+	for well in g_df['tag_prefix'].unique():
+		plot_contr(g_df[g_df['tag_prefix'] == well].sort_values('time'))
 
 	# this = turbine_df[['API', 'Facilitykey']]
 	# that = this.groupby('Facilitykey')['API'].nunique()
