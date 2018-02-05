@@ -118,7 +118,7 @@ def turb_contr(gwr_df, turbine_df):
 
 	g_df = g_df[['Facilitykey', 'time', 'FacilityName', 'water', 'oil']]
 	g_df['time'] = pd.DatetimeIndex(g_df['time']).normalize()
-	g_df = g_df.groupby(['Facilitykey', 'FacilityName', 'time'], as_index=False).median()
+	g_df = g_df.groupby(['Facilitykey', 'FacilityName', 'time'], as_index=False).mean()
 
 	t_df.loc[:, 'time'] = pd.to_datetime(t_df['flow_date'])
 	t_df = t_df[['tag_prefix', 'FacilityName', 'time', 'volume', 'API']]
@@ -161,21 +161,44 @@ def plot_contr(df):
 
 	plt.savefig('images/contributions/cont_{}.png'.format(well))
 
+def gauge_plot(df, gauge_df):
+    plt.close()
+    fig, ax = plt.subplots(1, 1, figsize=(12, 10))
+
+    date_min = df['CalcDate'].min()
+    date_max = df['CalcDate'].max()
+    g_df = gauge_df[(gauge_df['gaugeDate'] >= date_min) & (gauge_df['gaugeDate'] <= date_max)]
+
+    ax.plot(df['time'], df['LGROil'], label='LGR Value')
+    ax.plot(g_df['gaugeDate'], g_df['total_oil'], 'ro', label='Real Gauges')
+    ymin, ymax = plt.ylim()
+
+    facility = lgr_df['FacilityName'].unique()[0]
+    plt.title('LGR for Facility {}'.format(facility))
+    ax.set_xlabel('Date')
+    ax.set_ylabel('bbl Oil')
+    plt.ylim(ymin=0)
+
+    plt.xticks(rotation='vertical')
+    plt.legend()
+
+    plt.savefig('images/contributions/gauge/{}.png'.format(facility))
+
 
 if __name__ == "__main__":
 	# df = data_conn()
 	# df = shift_volumes(df)
 	# df.to_csv('data/turbine.csv')
-	# df = pd.read_csv('data/turbine.csv')
+	df = pd.read_csv('data/turbine.csv')
 
 	# gwr_df = turbine_gwr_pull()
 	# gwr_df.to_csv('data/turbine_gwr.csv')
-	# gwr_df = pd.read_csv('data/turbine_gwr.csv')
+	gwr_df = pd.read_csv('data/turbine_gwr.csv')
 
-	# tag_df = tag_dict()
-	# turbine_df = df.merge(tag_df, on='tag_prefix', how='inner')
-	# g_df = turb_contr(gwr_df, turbine_df)
-	# g_df.to_csv('data/turbine_contribution.csv')
+	tag_df = tag_dict()
+	turbine_df = df.merge(tag_df, on='tag_prefix', how='inner')
+	g_df = turb_contr(gwr_df, turbine_df)
+	g_df.to_csv('data/turbine_contribution.csv')
 
 	g_df = pd.read_csv('data/turbine_contribution.csv')
 	g_df['time'] = pd.to_datetime(g_df['time'])
