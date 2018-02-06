@@ -390,7 +390,7 @@ def lgr_gauge_plot(lgr_df, gauge_df):
     plt.xticks(rotation='vertical')
     plt.legend()
 
-    plt.savefig('images/lgr/v4/lgr_gauge_{}.png'.format(facility))
+    plt.savefig('images/lgr/worst/lgr_gauge_{}.png'.format(facility))
 
 def lgr_over(df):
     plt.close()
@@ -468,46 +468,55 @@ def facility_error(df):
                                       ignore_index=True)
     return return_df.sort_values('average_delta')
 
-def acc_distr(df):
+def acc_distr(df, month=''):
     plt.close()
 
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
     ax.hist(df[(df['per_err'] != np.inf) & \
                (df['per_err'].notnull()) & \
-               (df['per_err'] < 100)]['per_err'].values, \
+               (df['per_err'] <= 200)]['per_err'].values, \
                bins=80, color='#2d92e5', label='LGR Error Rates')
     ax.axvline(20, color='#ad0f0f', linestyle='dashed', label='20% Error')
-    ax.axvline(df[(df['per_err'] != np.inf) & \
+    error = df[(df['per_err'] != np.inf) & \
                (df['per_err'].notnull()) & \
-               (df['per_err'] < 100)]['per_err'].mean(), \
-               color='#540bc1', linestyle='dashed', label='Mean Error')
+               (df['per_err'] <= 100)]['per_err'].mean()
+    ax.axvline(error, color='#540bc1', linestyle='dashed', label='Mean Error')
 
     plt.title('Percent Error of LGR')
     plt.xlabel('Percent Error (%)')
     plt.ylabel('Facility Count')
+    xmin, xmax = plt.xlim()
+    ymin, ymax = plt.ylim()
+    plt.text(xmax*.5, ymax*.8, 'Averaging {:.2f}% Error'.format(error), fontsize=18)
     plt.legend()
 
-    plt.savefig('images/lgr/lgr_error.png')
+    plt.savefig('images/lgr/lgr_error_{}.png'.format(month))
 
 
 if __name__ == '__main__':
     # df_lgr = lgr_pull()
     # df_lgr.to_csv('data/lgr.csv')
-    # df_lgr = pd.read_csv('data/lgr.csv')
+    df_lgr = pd.read_csv('data/lgr.csv')
 
     # df_spill = spill_pull()
 
     # df_gwr = gwr_pull()
-    # gauge_df = gauge_pull()
+    gauge_df = gauge_pull()
 
     # off_df = spill_gauge(df_spill, gauge_df)
 
-    # df = match_gauge(df_lgr, gauge_df)
+    df = match_gauge(df_lgr, gauge_df[gauge_df['total_oil'] >= 140])
     # off_df = facility_error(df)
     # off_df.to_csv('data/temp_lgr_error.csv')
-    off_df = pd.read_csv('data/temp_lgr_error.csv')
+    # off_df = pd.read_csv('data/temp_lgr_error.csv')
+    # worst_lgr = off_df[off_df['per_err'].notnull()].sort_values('per_err')
+    # worst_lgr = worst_lgr.tail(20)
+    # df_lgr = df_lgr[df_lgr['FacilityKey'].isin(worst_lgr['FacilityKey'].unique())]
+    # df_lgr['CalcDate'] = pd.to_datetime(df_lgr['CalcDate'])
 
-    acc_distr(off_df)
+    for month in [8, 9, 10, 11, 12, 1]:
+        off_df = facility_error(df[df['Date'].dt.month == month])
+        acc_distr(off_df[(off_df['PredictionMethod'] == 'LGRv4')], month=month)
 
     # df_lgr.to_csv('data/lgr.csv')
     # df_gwr.to_csv('data/gwr.csv')
@@ -519,7 +528,8 @@ if __name__ == '__main__':
 
     # for facility in sorted(df_lgr['FacilityKey'].unique()):
     #     lgr_gauge_plot(df_lgr[df_lgr['FacilityKey'] == facility].sort_values('CalcDate'), \
-    #                    gauge_df[gauge_df['Facilitykey'] == facility].sort_values('gaugeDate'))
+    #                    gauge_df[(gauge_df['Facilitykey'] == facility) & \
+    #                             (gauge_df['total_oil'] >= 140)].sort_values('gaugeDate'))
         # break
 
     # plot_lgr(df_lgr[(df_lgr['LGROil'] <= df_lgr['FacilityCapacity']) & \
