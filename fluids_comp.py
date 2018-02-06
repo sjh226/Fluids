@@ -415,7 +415,7 @@ def lgr_over(df):
 
 def match_gauge(lgr, gauge):
     lgr['Date'] = pd.to_datetime(lgr['CalcDate']) + pd.Timedelta('1 days')
-    lgr = lgr[['Facilitykey', 'FacilityName', 'Date', 'LGROil', 'LGRWater', 'PredictionMethod']]
+    lgr = lgr[['FacilityKey', 'FacilityName', 'Date', 'LGROil', 'LGRWater', 'PredictionMethod']]
     gauge['Date'] = gauge['gaugeDate']
     gauge['FacilityKey'] = gauge['Facilitykey']
     gauge = gauge[['FacilityKey', 'Date', 'total_oil', 'total_water']]
@@ -468,21 +468,46 @@ def facility_error(df):
                                       ignore_index=True)
     return return_df.sort_values('average_delta')
 
+def acc_distr(df):
+    plt.close()
+
+    fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+    ax.hist(df[(df['per_err'] != np.inf) & \
+               (df['per_err'].notnull()) & \
+               (df['per_err'] < 100)]['per_err'].values, \
+               bins=80, color='#2d92e5', label='LGR Error Rates')
+    ax.axvline(20, color='#ad0f0f', linestyle='dashed', label='20% Error')
+    ax.axvline(df[(df['per_err'] != np.inf) & \
+               (df['per_err'].notnull()) & \
+               (df['per_err'] < 100)]['per_err'].mean(), \
+               color='#540bc1', linestyle='dashed', label='Mean Error')
+
+    plt.title('Percent Error of LGR')
+    plt.xlabel('Percent Error (%)')
+    plt.ylabel('Facility Count')
+    plt.legend()
+
+    plt.savefig('images/lgr/lgr_error.png')
+
 
 if __name__ == '__main__':
     # df_lgr = lgr_pull()
     # df_lgr.to_csv('data/lgr.csv')
     # df_lgr = pd.read_csv('data/lgr.csv')
 
-    df_spill = spill_pull()
+    # df_spill = spill_pull()
 
     # df_gwr = gwr_pull()
-    gauge_df = gauge_pull()
+    # gauge_df = gauge_pull()
 
-    off_df = spill_gauge(df_spill, gauge_df)
+    # off_df = spill_gauge(df_spill, gauge_df)
 
     # df = match_gauge(df_lgr, gauge_df)
     # off_df = facility_error(df)
+    # off_df.to_csv('data/temp_lgr_error.csv')
+    off_df = pd.read_csv('data/temp_lgr_error.csv')
+
+    acc_distr(off_df)
 
     # df_lgr.to_csv('data/lgr.csv')
     # df_gwr.to_csv('data/gwr.csv')
