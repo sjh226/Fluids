@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from gwr import turbine_gwr_pull
+from fluids_comp import gauge_pull
 
 
 def data_conn():
@@ -161,49 +162,81 @@ def plot_contr(df):
 
 	plt.savefig('images/contributions/cont_{}.png'.format(well))
 
+def fac_contr(df):
+	plt.close()
+	fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+
+	fac = df['FacilityName'].unique()[0]
+
+	fac_df = df[['FacilityName', 'time', 'volume', 'oil_contr']]
+	fac_df = fac_df.groupby(['FacilityName', 'time'], as_index=False).sum()
+	fac_df = fac_df.sort_values('time')
+	pos_df = fac_df
+	pos_df.loc[(fac_df['oil_contr'] < 0) | (fac_df['oil_contr'].isnull()), 'oil_contr'] = 0
+	pos_df = pos_df[pos_df['oil_contr'] > 0]
+
+	ax.plot(pos_df['time'], pos_df['volume'], color='black', label='Turbine Volume')
+	ax.plot(pos_df['time'], pos_df['oil_contr'], color='red', label='GWR with Turbine Contribution')
+
+	plt.xticks(rotation='vertical')
+	plt.xlabel('Date')
+	plt.ylabel('Oil Rate (bbl/day)')
+	plt.title('Turbine Contribution for {}'.format(fac))
+	plt.legend()
+
+	plt.savefig('images/contributions/facility/cont_{}.png'.format(fac))
+
 def gauge_plot(df, gauge_df):
-    plt.close()
-    fig, ax = plt.subplots(1, 1, figsize=(12, 10))
+	plt.close()
+	fig, ax = plt.subplots(1, 1, figsize=(12, 10))
 
-    date_min = df['CalcDate'].min()
-    date_max = df['CalcDate'].max()
-    g_df = gauge_df[(gauge_df['gaugeDate'] >= date_min) & (gauge_df['gaugeDate'] <= date_max)]
+	facility_df = df.groupby(['FacilityName', 'time']).sum()
 
-    ax.plot(df['time'], df['LGROil'], label='LGR Value')
-    ax.plot(g_df['gaugeDate'], g_df['total_oil'], 'ro', label='Real Gauges')
-    ymin, ymax = plt.ylim()
+	date_min = df['time'].min()
+	date_max = df['time'].max()
+	g_df = gauge_df[(gauge_df['gaugeDate'] >= date_min) & (gauge_df['gaugeDate'] <= date_max)]
 
-    facility = lgr_df['FacilityName'].unique()[0]
-    plt.title('LGR for Facility {}'.format(facility))
-    ax.set_xlabel('Date')
-    ax.set_ylabel('bbl Oil')
-    plt.ylim(ymin=0)
+	ax.plot(df['time'], df['volume'], label='Turbine Value')
+	ax.plot(g_df['gaugeDate'], g_df['total_oil'], 'ro', label='Real Gauges')
+	ymin, ymax = plt.ylim()
 
-    plt.xticks(rotation='vertical')
-    plt.legend()
+	facility = lgr_df['FacilityName'].unique()[0]
+	plt.title('Turbine Comparison for Facility {}'.format(facility))
+	ax.set_xlabel('Date')
+	ax.set_ylabel('bbl Oil')
+	plt.ylim(ymin=0)
 
-    plt.savefig('images/contributions/gauge/{}.png'.format(facility))
+	plt.xticks(rotation='vertical')
+	plt.legend()
+
+	plt.savefig('images/contributions/gauge/{}.png'.format(facility))
 
 
 if __name__ == "__main__":
 	# df = data_conn()
 	# df = shift_volumes(df)
 	# df.to_csv('data/turbine.csv')
-	df = pd.read_csv('data/turbine.csv')
+	# df = pd.read_csv('data/turbine.csv')
 
 	# gwr_df = turbine_gwr_pull()
 	# gwr_df.to_csv('data/turbine_gwr.csv')
-	gwr_df = pd.read_csv('data/turbine_gwr.csv')
+	# gwr_df = pd.read_csv('data/turbine_gwr.csv')
 
-	tag_df = tag_dict()
-	turbine_df = df.merge(tag_df, on='tag_prefix', how='inner')
-	g_df = turb_contr(gwr_df, turbine_df)
-	g_df.to_csv('data/turbine_contribution.csv')
+	# tag_df = tag_dict()
+	# turbine_df = df.merge(tag_df, on='tag_prefix', how='inner')
+	# g_df = turb_contr(gwr_df, turbine_df)
+	# g_df.to_csv('data/turbine_contribution.csv')
 
 	g_df = pd.read_csv('data/turbine_contribution.csv')
 	g_df['time'] = pd.to_datetime(g_df['time'])
-	for well in g_df['tag_prefix'].unique():
-		plot_contr(g_df[g_df['tag_prefix'] == well].sort_values('time'))
+	# for well in g_df['tag_prefix'].unique():
+	# 	plot_contr(g_df[g_df['tag_prefix'] == well].sort_values('time'))
+	for fac in g_df['FacilityName'].unique():
+		fac_contr(g_df[g_df['FacilityName'] == fac].sort_values('time'))
+
+	# gauge_df = gauge_pull()
+	# for fac in g_df['FacilityName'].unique():
+	# 	gauge_plot(g_df[g_df['FacilityName'] == fac], gauge_df[gauge_df['FacilityName'] == fac])
 
 	# this = turbine_df[['API', 'Facilitykey']]
 	# that = this.groupby('Facilitykey')['API'].nunique()
