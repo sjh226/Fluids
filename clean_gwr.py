@@ -358,27 +358,35 @@ def rate(df):
 def rebuild(df):
     return_df = pd.DataFrame(columns=['TAG_PREFIX', 'DateKey', 'TANK_TYPE', \
                                       'TANKLVL', 'TANKCNT', 'CalcDate'])
-    count = 0
-    for idx, row in df[(df['total_rate'] >= 0) | (df['total_rate'].isnull()) | \
-                       (df['oil_rate'] >= 0) | (df['oil_rate'].isnull()) | \
-                       (df['water_rate'] >= 0) | (df['water_rate'].isnull())].iterrows():
-        if row['water'] >= 0:
-            w = pd.Series([row['tag_prefix'], row['time'], 'WAT', row['water'], row['tankcnt'], row['time']], \
-                          index=['TAG_PREFIX', 'DateKey', 'TANK_TYPE', 'TANKLVL', 'TANKCNT', 'CalcDate'])
-            return_df = return_df.append(w, ignore_index=True)
-        if row['oil'] >= 0:
-            o = pd.Series([row['tag_prefix'], row['time'], 'CND', row['oil'], row['tankcnt'], row['time']], \
-                          index=['TAG_PREFIX', 'DateKey', 'TANK_TYPE', 'TANKLVL', 'TANKCNT', 'CalcDate'])
-            return_df = return_df.append(o, ignore_index=True)
-        if row['total'] >= 0:
-            t = pd.Series([row['tag_prefix'], row['time'], 'TOT', row['total'], row['tankcnt'], row['time']], \
-                          index=['TAG_PREFIX', 'DateKey', 'TANK_TYPE', 'TANKLVL', 'TANKCNT', 'CalcDate'])
-            return_df = return_df.append(t, ignore_index=True)
-        print(count)
-        count += 1
-    return return_df
 
+    limit_df = df[(df['total_rate'] >= 0) | (df['total_rate'].isnull()) | \
+                  (df['oil_rate'] >= 0) | (df['oil_rate'].isnull()) | \
+                  (df['water_rate'] >= 0) | (df['water_rate'].isnull())]
+    water_df = limit_df[limit_df['water'].notnull()][['tag_prefix', 'time', 'water', 'tankcnt']]
+    water_df['TANK_TYPE'] = 'WAT'
+    water_df.rename(index=str, columns={'tag_prefix':'TAG_PREFIX', 'time':'DateKey', \
+                                        'water':'TANKLVL', 'tankcnt':'TANKCNT'}, \
+                                        inplace=True)
+    water_df['CalcDate'] = water_df['DateKey']
+    return_df = return_df.append(water_df)
 
+    oil_df = limit_df[limit_df['oil'].notnull()][['tag_prefix', 'time', 'oil', 'tankcnt']]
+    oil_df['TANK_TYPE'] = 'CND'
+    oil_df.rename(index=str, columns={'tag_prefix':'TAG_PREFIX', 'time':'DateKey', \
+                                      'oil':'TANKLVL', 'tankcnt':'TANKCNT'}, \
+                                      inplace=True)
+    oil_df['CalcDate'] = oil_df['DateKey']
+    return_df = return_df.append(oil_df)
+
+    total_df = limit_df[limit_df['total'].notnull()][['tag_prefix', 'time', 'total', 'tankcnt']]
+    total_df['TANK_TYPE'] = 'TOT'
+    total_df.rename(index=str, columns={'tag_prefix':'TAG_PREFIX', 'time':'DateKey', \
+                                        'total':'TANKLVL', 'tankcnt':'TANKCNT'}, \
+                                        inplace=True)
+    total_df['CalcDate'] = total_df['DateKey']
+    return_df = return_df.append(total_df)
+
+    return return_df.sort_values(['TAG_PREFIX', 'DateKey'])
 
 
 if __name__ == '__main__':
