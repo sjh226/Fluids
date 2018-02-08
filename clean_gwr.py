@@ -403,9 +403,23 @@ def rebuild(df):
 
     return return_df.sort_values(['TAG_PREFIX', 'DateKey'])
 
+def sql_push(df):
+	try:
+		connection = pyodbc.connect(r'Driver={SQL Server Native Client 11.0};'
+									r'Server=SQLDW-L48.BP.Com;'
+									r'Database=TeamOptimizationEngineering;'
+									r'trusted_connection=yes'
+									)
+	except pyodbc.Error:
+		print("Connection Error")
+		sys.exit()
+
+    df.to_sql('[TeamOptimizationEngineering].[Test].[CleanGWR]', connection, if_exists='replace')
+
 
 if __name__ == '__main__':
     # df = rate(tank_split(oracle_pull()))
     # df.to_csv('temp_gwr.csv')
     df = pd.read_csv('temp_gwr.csv')
     df = rebuild(df)
+    sql_push(df)
