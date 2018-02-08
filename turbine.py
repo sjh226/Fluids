@@ -56,12 +56,13 @@ def tag_dict():
 				,PTD.API
 				,DF.Facilitykey
 				,DF.FacilityName
+				,DW.WellFlac
 		FROM [TeamOptimizationEngineering].[Reporting].[PITag_Dict] AS PTD
 		JOIN [TeamOptimizationEngineering].[dbo].[DimensionsWells] AS DW
 			ON PTD.API = DW.API
 		JOIN [TeamOptimizationEngineering].[dbo].[DimensionsFacilities] AS DF
 			ON DW.Facilitykey = DF.Facilitykey
-		GROUP BY PTD.TAG, PTD.API, DF.Facilitykey, DF.FacilityName, DF.FacilityCapacity;
+		GROUP BY PTD.TAG, PTD.API, DF.Facilitykey, DF.FacilityName, DF.FacilityCapacity, DW.WellFlac;
 	""")
 
 	cursor.execute(SQLCommand)
@@ -110,19 +111,26 @@ def plot_rate(df):
 
 	plt.savefig('images/turbine/rate_{}.png'.format(facility))
 
-def turb_contr(gwr_df, turbine_df):
+def turb_contr(gwr_df, turbine_df, limit='tag'):
 	tag_list = ['WAM-ML11_150H', 'WAM-ML11_160H', 'WAM-ML11_160D', 'WAM-BB19', \
 				'WAM-CL29_150H', 'WAM-CH320C1', 'WAM-HP13_150H', \
 				'WAM-CL29_160H', 'WAM-LM8_115H']
-	g_df = gwr_df[gwr_df['tag_prefix'].str.contains('|'.join(tag_list))]
-	t_df = turbine_df[turbine_df['tag_prefix'].str.contains('|'.join(tag_list))]
+	flac_list = ['74830301', '72556301', '72300401', '72513001']
+	if limit.lower() == 'tag':
+		g_df = gwr_df[gwr_df['tag_prefix'].str.contains('|'.join(tag_list))]
+		t_df = turbine_df[turbine_df['tag_prefix'].str.contains('|'.join(tag_list))]
+	elif limit.lower() == 'flac':
+		t_df = turbine_df[turbine_df['WellFlac'].isin(flac_list)]
+		g_df = gwr_df[gwr_df['tag_prefix'].isin(t_df['tag_prefix'].unique())]
 
+	print(t_df['WellFlac'].unique())
+	print(g_df['tag_prefix'].unique())
 	g_df = g_df[['Facilitykey', 'time', 'FacilityName', 'water', 'oil']]
 	g_df['time'] = pd.DatetimeIndex(g_df['time']).normalize()
 	g_df = g_df.groupby(['Facilitykey', 'FacilityName', 'time'], as_index=False).mean()
 
 	t_df.loc[:, 'time'] = pd.to_datetime(t_df['flow_date'])
-	t_df = t_df[['tag_prefix', 'FacilityName', 'time', 'volume', 'API']]
+	t_df = t_df[['tag_prefix', 'FacilityName', 'time', 'volume', 'WellFlac']]
 	t_df.loc[:, 'contr'] = np.nan
 	t_df.loc[:, 'oil'] = np.nan
 	t_df.loc[:, 'water'] = np.nan
@@ -213,26 +221,27 @@ def gauge_plot(df, gauge_df):
 
 
 if __name__ == "__main__":
-	# df = data_conn()
-	# df = shift_volumes(df)
-	# df.to_csv('data/turbine.csv')
-	# df = pd.read_csv('data/turbine.csv')
+	df = data_conn()
+	df = shift_volumes(df)
+	df.to_csv('data/turbine.csv')
+	df = pd.read_csv('data/turbine.csv')
 
-	# gwr_df = turbine_gwr_pull()
-	# gwr_df.to_csv('data/turbine_gwr.csv')
-	# gwr_df = pd.read_csv('data/turbine_gwr.csv')
+	gwr_df = turbine_gwr_pull()
+	gwr_df.to_csv('data/turbine_gwr.csv')
+	gwr_df = pd.read_csv('data/turbine_gwr.csv')
 
-	# tag_df = tag_dict()
-	# turbine_df = df.merge(tag_df, on='tag_prefix', how='inner')
-	# g_df = turb_contr(gwr_df, turbine_df)
-	# g_df.to_csv('data/turbine_contribution.csv')
+	tag_df = tag_dict()
+	turbine_df = df.merge(tag_df, on='tag_prefix', how='inner')
+	g_df = turb_contr(gwr_df, turbine_df)
+	# g_df = turb_contr(gwr_df, turbine_df, limit='flac')
+	g_df.to_csv('data/turbine_contribution.csv')
 
 	g_df = pd.read_csv('data/turbine_contribution.csv')
-	g_df['time'] = pd.to_datetime(g_df['time'])
+	# g_df['time'] = pd.to_datetime(g_df['time'])
 	# for well in g_df['tag_prefix'].unique():
 	# 	plot_contr(g_df[g_df['tag_prefix'] == well].sort_values('time'))
-	for fac in g_df['FacilityName'].unique():
-		fac_contr(g_df[g_df['FacilityName'] == fac].sort_values('time'))
+	# for fac in g_df['FacilityName'].unique():
+	# 	fac_contr(g_df[g_df['FacilityName'] == fac].sort_values('time'))
 
 	# gauge_df = gauge_pull()
 	# for fac in g_df['FacilityName'].unique():
