@@ -14,12 +14,12 @@ def data_conn():
 	cursor = connection.cursor()
 	query = ("""
 		SELECT  TAG_PREFIX
-				,TRUNC(TIME) AS flow_date
-				,MAX(CTS_VC) AS volume
+				,TIME AS flow_date
+				,CTS_VC AS volume
 		FROM DATA_QUALITY.PI_WAM_ALL_WELLS_OPS
 		WHERE CTS_VC IS NOT NULL
-		GROUP BY TAG_PREFIX, TRUNC(TIME)
-		ORDER BY TAG_PREFIX, TRUNC(TIME)
+		--GROUP BY TAG_PREFIX, TIME
+		ORDER BY TAG_PREFIX, TIME
 	""")
 
 	cursor.execute(query)
@@ -123,8 +123,6 @@ def turb_contr(gwr_df, turbine_df, limit='tag'):
 		t_df = turbine_df[turbine_df['WellFlac'].isin(flac_list)]
 		g_df = gwr_df[gwr_df['tag_prefix'].isin(t_df['tag_prefix'].unique())]
 
-	print(t_df['WellFlac'].unique())
-	print(g_df['tag_prefix'].unique())
 	g_df = g_df[['Facilitykey', 'time', 'FacilityName', 'water', 'oil']]
 	g_df['time'] = pd.DatetimeIndex(g_df['time']).normalize()
 	g_df = g_df.groupby(['Facilitykey', 'FacilityName', 'time'], as_index=False).mean()
