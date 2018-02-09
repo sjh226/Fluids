@@ -505,7 +505,7 @@ if __name__ == '__main__':
 
     # off_df = spill_gauge(df_spill, gauge_df)
 
-    df = match_gauge(df_lgr, gauge_df[gauge_df['total_oil'] >= 140])
+    df = match_gauge(df_lgr, gauge_df[gauge_df['total_oil'] >= 50])
     # off_df = facility_error(df)
     # off_df.to_csv('data/temp_lgr_error.csv')
     # off_df = pd.read_csv('data/temp_lgr_error.csv')
@@ -514,9 +514,9 @@ if __name__ == '__main__':
     # df_lgr = df_lgr[df_lgr['FacilityKey'].isin(worst_lgr['FacilityKey'].unique())]
     # df_lgr['CalcDate'] = pd.to_datetime(df_lgr['CalcDate'])
 
-    for month in [8, 9, 10, 11, 12, 1]:
-        off_df = facility_error(df[df['Date'].dt.month == month])
-        acc_distr(off_df[(off_df['PredictionMethod'] == 'LGRv4')], month=month)
+    # for month in [8, 9, 10, 11, 12, 1]:
+    #     off_df = facility_error(df[df['Date'].dt.month == month])
+    #     acc_distr(off_df[(off_df['PredictionMethod'] == 'LGRv4')], month=month)
 
     # df_lgr.to_csv('data/lgr.csv')
     # df_gwr.to_csv('data/gwr.csv')
