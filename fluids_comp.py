@@ -25,16 +25,16 @@ def lgr_pull():
                 ,LGR.FacilityCapacity
                 ,LGR.CalcDate
                 ,LGR.PredictionMethod
-        FROM [TeamOptimizationEngineering].[dbo].[InventoryAll_Calculated] AS LGR
+        FROM [TeamOptimizationEngineering].[dbo].[Inventory] AS LGR
         JOIN (SELECT	FacilityKey
         				,MAX(CalcDate) maxtime
-        		FROM [TeamOptimizationEngineering].[dbo].[InventoryAll_Calculated]
+        		FROM [TeamOptimizationEngineering].[dbo].[Inventory]
         		GROUP BY FacilityKey, CAST(CalcDate AS DATE)) AS MD
         	ON	MD.FacilityKey = LGR.FacilityKey
         	AND	MD.maxtime = LGR.CalcDate
         JOIN [TeamOptimizationEngineering].[dbo].[DimensionsWells] AS DW
         	ON LGR.FacilityKey = DW.FacilityKey
-        WHERE LGR.BusinessUnit = 'North'
+        --WHERE LGR.BusinessUnit = 'North'
             --AND LGR.PredictionMethod = 'LGRv4'
         GROUP BY LGR.FacilityKey, LGR.FacilityName, LGR.FacilityCapacity, LGR.CalcDate, LGR.PredictionMethod;
     """)
@@ -494,8 +494,8 @@ def acc_distr(df, month=''):
 
 
 if __name__ == '__main__':
-    # df_lgr = lgr_pull()
-    # df_lgr.to_csv('data/lgr.csv')
+    df_lgr = lgr_pull()
+    df_lgr.to_csv('data/lgr.csv')
     df_lgr = pd.read_csv('data/lgr.csv')
 
     # df_spill = spill_pull()
