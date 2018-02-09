@@ -4,6 +4,8 @@ from scipy.stats import iqr
 import pyodbc
 import sys
 import cx_Oracle
+import sqlalchemy
+import urllib
 
 def oracle_pull():
 	connection = cx_Oracle.connect("REPORTING", "REPORTING", "L48APPSP1.WORLD")
@@ -341,85 +343,118 @@ def tank_split(df):
 	return df.sort_values(['tag_prefix', 'time'])
 
 def rate(df):
-    df['oil_rate'] = np.nan
-    df['water_rate'] = np.nan
-    df['total_rate'] = np.nan
-    for tag in df['tag_prefix'].unique():
-        df.loc[df['tag_prefix'] == tag, 'oil_rate'] = \
-                 df[df['tag_prefix'] == tag]['oil'] - \
-                 df[df['tag_prefix'] == tag]['oil'].shift(1)
-        df.loc[df['tag_prefix'] == tag, 'water_rate'] = \
-                 df[df['tag_prefix'] == tag]['water'] - \
-                 df[df['tag_prefix'] == tag]['water'].shift(1)
-        df.loc[df['tag_prefix'] == tag, 'total_rate'] = \
-                 df[df['tag_prefix'] == tag]['total'] - \
-                 df[df['tag_prefix'] == tag]['total'].shift(1)
-    return df.sort_values(['tag_prefix', 'time'])
+	df['oil_rate'] = np.nan
+	df['water_rate'] = np.nan
+	df['total_rate'] = np.nan
+	for tag in df['tag_prefix'].unique():
+		df.loc[df['tag_prefix'] == tag, 'oil_rate'] = \
+				 df[df['tag_prefix'] == tag]['oil'] - \
+				 df[df['tag_prefix'] == tag]['oil'].shift(1)
+		df.loc[df['tag_prefix'] == tag, 'water_rate'] = \
+				 df[df['tag_prefix'] == tag]['water'] - \
+				 df[df['tag_prefix'] == tag]['water'].shift(1)
+		df.loc[df['tag_prefix'] == tag, 'total_rate'] = \
+				 df[df['tag_prefix'] == tag]['total'] - \
+				 df[df['tag_prefix'] == tag]['total'].shift(1)
+	return df.sort_values(['tag_prefix', 'time'])
 
 def rebuild(df):
-    return_df = pd.DataFrame(columns=['TAG_PREFIX', 'DateKey', 'TANK_TYPE', \
-                                      'TANKLVL', 'TANKCNT', 'CalcDate'])
+	return_df = pd.DataFrame(columns=['TAG_PREFIX', 'DateKey', 'TANK_TYPE', \
+									  'TANKLVL', 'TANKCNT', 'CalcDate'])
 
-    water_iqr = df[df['water_rate'] >= 0]['water_rate'].median() + \
-                iqr(df[df['water_rate'] >= 0]['water_rate'], rng=(50, 75))
-    oil_iqr = df[df['oil_rate'] >= 0]['oil_rate'].median() + \
-              iqr(df[df['oil_rate'] >= 0]['oil_rate'], rng=(50, 75))
-    total_iqr = df[df['total_rate'] >= 0]['total_rate'].median() + \
-                iqr(df[df['total_rate'] >= 0]['total_rate'], rng=(50, 75))
+	water_iqr_u = df[df['water_rate'] >= 0]['water_rate'].median() + \
+				  iqr(df[df['water_rate'] >= 0]['water_rate'], rng=(50, 75))
+	oil_iqr_u = df[df['oil_rate'] >= 0]['oil_rate'].median() + \
+				iqr(df[df['oil_rate'] >= 0]['oil_rate'], rng=(50, 75))
+	total_iqr_u = df[df['total_rate'] >= 0]['total_rate'].median() + \
+				  iqr(df[df['total_rate'] >= 0]['total_rate'], rng=(50, 75))
+	water_iqr_l = df[df['water_rate'] >= 0]['water_rate'].median() - \
+				  iqr(df[df['water_rate'] >= 0]['water_rate'], rng=(50, 75))
+	oil_iqr_l = df[df['oil_rate'] >= 0]['oil_rate'].median() - \
+				iqr(df[df['oil_rate'] >= 0]['oil_rate'], rng=(50, 75))
+	total_iqr_l = df[df['total_rate'] >= 0]['total_rate'].median() - \
+				  iqr(df[df['total_rate'] >= 0]['total_rate'], rng=(50, 75))
 
-    limit_df = df[(df['total_rate'] >= 0) | (df['total_rate'].isnull()) | \
-                  (df['oil_rate'] >= 0) | (df['oil_rate'].isnull()) | \
-                  (df['water_rate'] >= 0) | (df['water_rate'].isnull())]
+	# limit_df = df[(df['total_rate'] >= 0) | (df['total_rate'].isnull()) | \
+	#               (df['oil_rate'] >= 0) | (df['oil_rate'].isnull()) | \
+	#               (df['water_rate'] >= 0) | (df['water_rate'].isnull())]
 
-    water_df = limit_df[(limit_df['water'].notnull()) & \
-                        (limit_df['water_rate'] <= water_iqr)]\
-                        [['tag_prefix', 'time', 'water', 'tankcnt']]
-    water_df['TANK_TYPE'] = 'WAT'
-    water_df.rename(index=str, columns={'tag_prefix':'TAG_PREFIX', 'time':'DateKey', \
-                                        'water':'TANKLVL', 'tankcnt':'TANKCNT'}, \
-                                        inplace=True)
-    water_df['CalcDate'] = water_df['DateKey']
-    return_df = return_df.append(water_df)
+	limit_df = df
 
-    oil_df = limit_df[(limit_df['oil'].notnull()) & \
-                      (limit_df['oil_rate'] <= water_iqr)]\
-                      [['tag_prefix', 'time', 'oil', 'tankcnt']]
-    oil_df['TANK_TYPE'] = 'CND'
-    oil_df.rename(index=str, columns={'tag_prefix':'TAG_PREFIX', 'time':'DateKey', \
-                                      'oil':'TANKLVL', 'tankcnt':'TANKCNT'}, \
-                                      inplace=True)
-    oil_df['CalcDate'] = oil_df['DateKey']
-    return_df = return_df.append(oil_df)
+	water_df = limit_df[(limit_df['water'].notnull()) & \
+						(limit_df['water_rate'] <= water_iqr_u) & \
+						(limit_df['water_rate'] >= water_iqr_l)]\
+						[['tag_prefix', 'time', 'water', 'tankcnt']]
+	water_df['TANK_TYPE'] = 'WAT'
+	water_df.rename(index=str, columns={'tag_prefix':'TAG_PREFIX', 'time':'DateKey', \
+										'water':'TANKLVL', 'tankcnt':'TANKCNT'}, \
+										inplace=True)
+	water_df['CalcDate'] = water_df['DateKey']
+	return_df = return_df.append(water_df)
 
-    total_df = limit_df[(limit_df['total'].notnull()) & \
-                        (limit_df['total_rate'] <= water_iqr)]\
-                        [['tag_prefix', 'time', 'total', 'tankcnt']]
-    total_df['TANK_TYPE'] = 'TOT'
-    total_df.rename(index=str, columns={'tag_prefix':'TAG_PREFIX', 'time':'DateKey', \
-                                        'total':'TANKLVL', 'tankcnt':'TANKCNT'}, \
-                                        inplace=True)
-    total_df['CalcDate'] = total_df['DateKey']
-    return_df = return_df.append(total_df)
+	oil_df = limit_df[(limit_df['oil'].notnull()) & \
+					  (limit_df['oil_rate'] <= oil_iqr_u) & \
+					  (limit_df['oil_rate'] >= oil_iqr_l)]\
+					  [['tag_prefix', 'time', 'oil', 'tankcnt']]
+	oil_df['TANK_TYPE'] = 'CND'
+	oil_df.rename(index=str, columns={'tag_prefix':'TAG_PREFIX', 'time':'DateKey', \
+									  'oil':'TANKLVL', 'tankcnt':'TANKCNT'}, \
+									  inplace=True)
+	oil_df['CalcDate'] = oil_df['DateKey']
+	return_df = return_df.append(oil_df)
 
-    return return_df.sort_values(['TAG_PREFIX', 'DateKey'])
+	total_df = limit_df[(limit_df['total'].notnull()) & \
+						(limit_df['total_rate'] <= total_iqr_u) & \
+						(limit_df['total_rate'] >= total_iqr_l)]\
+						[['tag_prefix', 'time', 'total', 'tankcnt']]
+	total_df['TANK_TYPE'] = 'TOT'
+	total_df.rename(index=str, columns={'tag_prefix':'TAG_PREFIX', 'time':'DateKey', \
+										'total':'TANKLVL', 'tankcnt':'TANKCNT'}, \
+										inplace=True)
+	total_df['CalcDate'] = total_df['DateKey']
+	return_df = return_df.append(total_df)
+	return_df = return_df[['TAG_PREFIX', 'DateKey', 'TANK_TYPE', 'TANKLVL', 'TANKCNT', 'CalcDate']]
+
+	return return_df.sort_values(['TAG_PREFIX', 'DateKey'])
 
 def sql_push(df):
-	try:
-		connection = pyodbc.connect(r'Driver={SQL Server Native Client 11.0};'
-									r'Server=SQLDW-L48.BP.Com;'
-									r'Database=TeamOptimizationEngineering;'
-									r'trusted_connection=yes'
-									)
-	except pyodbc.Error:
-		print("Connection Error")
-		sys.exit()
+	params = urllib.parse.quote_plus('Driver={SQL Server Native Client 11.0};\
+									 Server=SQLDW-TEST-L48.BP.Com;\
+									 Database=TeamOperationsAnalytics;\
+									 trusted_connection=yes'
+									 )
+	engine = sqlalchemy.create_engine('mssql+pyodbc:///?odbc_connect=%s' % params)
 
-    df.to_sql('[TeamOptimizationEngineering].[Test].[CleanGWR]', connection, if_exists='replace')
+    # # Code to try speeding up SQL insert
+	# conn = engine.connect().connection
+	# cursor = conn.cursor()
+	# records = [tuple(x) for x in df.values]
+    #
+	# insert_ = """
+	# 	INSERT INTO dbo.CleanGWR
+	# 	(TAG_PREFIX
+	# 	,DateKey
+	# 	,TANK_TYPE
+	# 	,TANKLVL
+	# 	,TANKCNT
+	# 	,CalcDate)
+	# 	VALUES"""
+	# def chunker(seq, size):
+	# 	return (seq[pos:pos + size] for pos in xrange(0, len(seq), size))
+	# for batch in chunker(records, 1000):
+	#     rows = ','.join(batch)
+	#     insert_rows = insert_ + rows
+	#     cursor.execute(insert_rows)
+	#     conn.commit()
+
+	test = df.iloc[:200]
+
+	test.to_sql('cleanGWR', engine, schema='dbo', if_exists='replace', index=False)
 
 
 if __name__ == '__main__':
-    # df = rate(tank_split(oracle_pull()))
-    # df.to_csv('temp_gwr.csv')
-    df = pd.read_csv('temp_gwr.csv')
-    df = rebuild(df)
-    sql_push(df)
+	# df = rebuild(rate(tank_split(oracle_pull())))
+	# df.to_csv('temp_gwr.csv')
+	df = pd.read_csv('temp_gwr.csv')
+	df.drop('Unnamed: 0', axis=1, inplace=True)
+	sql_push(df)
