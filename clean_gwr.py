@@ -458,10 +458,10 @@ def rebuild(df):
 	water_df['CalcDate'] = water_df['DateKey']
 	return_df = return_df.append(water_df)
 
-	print(oil_iqr_l)
-	print(limit_df['oil_rate'].min())
-	print(oil_iqr_u)
-	print(limit_df['oil_rate'].max())
+	# print(oil_iqr_l)
+	# print(limit_df['oil_rate'].min())
+	# print(oil_iqr_u)
+	# print(limit_df['oil_rate'].max())
 
 	o_df = df[df['oil'].notnull()]
 	o_lr = LinearRegression()
@@ -469,8 +469,7 @@ def rebuild(df):
 	o_y = o_lr.predict(o_df['days'].values.reshape(-1, 1))
 	o_dev = np.std(abs(o_df['oil'] - o_y))
 	oil_df = o_df[(abs(o_df['oil'] - o_y) <= 1.96 * o_dev) & \
-				  (o_df['oil'].notnull())][['tag_prefix', 'time', 'water', 'tankcnt']]
-
+				  (o_df['oil'].notnull())][['tag_prefix', 'time', 'oil', 'tankcnt']]
 	# oil_df = limit_df[(limit_df['oil'].notnull()) & \
 	# 				  (limit_df['oil_rate'] <= oil_iqr_u) & \
 	# 				  (limit_df['oil_rate'] >= oil_iqr_l) & \
@@ -497,7 +496,7 @@ def rebuild(df):
 	return_df = return_df.append(total_df)
 	return_df = return_df[['TAG_PREFIX', 'DateKey', 'TANK_TYPE', 'TANKLVL', 'TANKCNT', 'CalcDate']]
 
-	return return_df.sort_values(['TAG_PREFIX', 'DateKey'])
+	return return_df.sort_values(['TAG_PREFIX', 'DateKey']), o_y
 
 def sql_push(df):
 	params = urllib.parse.quote_plus('Driver={SQL Server Native Client 11.0};\
@@ -554,7 +553,7 @@ def rate_plot(df):
 
 	plt.savefig('images/gwr/test/{}rate_{}.png'.format(df['TANK_TYPE'].unique()[0], df['TAG_PREFIX'].unique()[0]))
 
-def test_plot(df, clean_df):
+def test_plot(df, clean_df, o_y):
 	plt.close()
 	fig, ax = plt.subplots(1, 1, figsize=(10, 10))
 
@@ -591,10 +590,10 @@ if __name__ == '__main__':
 	lim_df['time'] = pd.to_datetime(lim_df['time'])
 	tic_df = ticket_df[ticket_df['TAG'] == 'WAM-5MILE33-60D']
 
-	r_df = rebuild(lim_df[lim_df['time'] >= tic_df['date'].max()])
+	r_df, o_y = rebuild(lim_df[lim_df['time'] >= tic_df[tic_df['ticketType'] == 'Oil Haul']['date'].max()])
 	# sql_push(df)
 
 	for tag in ['WAM-5MILE33-60D']:
 		# rate_plot(r_df[(r_df['TAG_PREFIX'] == tag) & (r_df['TANK_TYPE'] == 'CND')])
 		test_plot(lim_df[lim_df['tag_prefix'] == tag], \
-				  r_df[(r_df['TAG_PREFIX'] == tag) & (r_df['TANK_TYPE'] == 'CND')])
+				  r_df[(r_df['TAG_PREFIX'] == tag) & (r_df['TANK_TYPE'] == 'CND')], o_y)
