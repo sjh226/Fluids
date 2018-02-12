@@ -8,6 +8,7 @@ import sqlalchemy
 import urllib
 import matplotlib.pyplot as plt
 from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import PolynomialFeatures
 
 
 def oracle_pull():
@@ -450,8 +451,10 @@ def rebuild(df):
 	if not df[df['oil'].notnull()].empty:
 		o_df = df[df['oil'].notnull()]
 		o_lr = LinearRegression()
-		o_lr = o_lr.fit(o_df['days'].values.reshape(-1, 1), o_df['oil'])
-		o_y = o_lr.predict(o_df['days'].values.reshape(-1, 1))
+		o_poly = PolynomialFeatures(5)
+		o_x_poly = o_poly.fit_transform(o_df['days'].values.reshape(-1, 1))
+		o_lr = o_lr.fit(o_x_poly, o_df['oil'])
+		o_y = o_lr.predict(o_x_poly)
 		o_dev = np.std(abs(o_df['oil'] - o_y))
 		oil_df = o_df[(abs(o_df['oil'] - o_y) <= 1.96 * o_dev) & \
 					  (o_df['oil'].notnull())][['tag_prefix', 'time', 'oil', 'tankcnt']]
