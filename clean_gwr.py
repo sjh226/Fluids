@@ -6,6 +6,8 @@ import sys
 import cx_Oracle
 import sqlalchemy
 import urllib
+import matplotlib.pyplot as plt
+
 
 def oracle_pull():
 	connection = cx_Oracle.connect("REPORTING", "REPORTING", "L48APPSP1.WORLD")
@@ -348,32 +350,34 @@ def rate(df):
 	df['total_rate'] = np.nan
 	for tag in df['tag_prefix'].unique():
 		df.loc[df['tag_prefix'] == tag, 'oil_rate'] = \
-				 df[df['tag_prefix'] == tag]['oil'] - \
-				 df[df['tag_prefix'] == tag]['oil'].shift(1)
+				 df[df['tag_prefix'] == tag]['oil'].shift(-2) - \
+				 df[df['tag_prefix'] == tag]['oil'].shift(2)
 		df.loc[df['tag_prefix'] == tag, 'water_rate'] = \
 				 df[df['tag_prefix'] == tag]['water'] - \
 				 df[df['tag_prefix'] == tag]['water'].shift(1)
 		df.loc[df['tag_prefix'] == tag, 'total_rate'] = \
 				 df[df['tag_prefix'] == tag]['total'] - \
 				 df[df['tag_prefix'] == tag]['total'].shift(1)
+		tanks = df[df['tag_prefix'] == tag]['tankcnt'].max()
+		df.drop(df[(df['tag_prefix'] == tag) & (df['tankcnt'] < tanks)].index, inplace=True)
 	return df.sort_values(['tag_prefix', 'time'])
 
 def rebuild(df):
 	return_df = pd.DataFrame(columns=['TAG_PREFIX', 'DateKey', 'TANK_TYPE', \
 									  'TANKLVL', 'TANKCNT', 'CalcDate'])
 
-	water_iqr_u = df[df['water_rate'] >= 0]['water_rate'].median() + \
-				  iqr(df[df['water_rate'] >= 0]['water_rate'], rng=(50, 75))
-	oil_iqr_u = df[df['oil_rate'] >= 0]['oil_rate'].median() + \
-				iqr(df[df['oil_rate'] >= 0]['oil_rate'], rng=(50, 75))
-	total_iqr_u = df[df['total_rate'] >= 0]['total_rate'].median() + \
-				  iqr(df[df['total_rate'] >= 0]['total_rate'], rng=(50, 75))
-	water_iqr_l = df[df['water_rate'] >= 0]['water_rate'].median() - \
-				  iqr(df[df['water_rate'] >= 0]['water_rate'], rng=(50, 75))
-	oil_iqr_l = df[df['oil_rate'] >= 0]['oil_rate'].median() - \
-				iqr(df[df['oil_rate'] >= 0]['oil_rate'], rng=(50, 75))
-	total_iqr_l = df[df['total_rate'] >= 0]['total_rate'].median() - \
-				  iqr(df[df['total_rate'] >= 0]['total_rate'], rng=(50, 75))
+	water_iqr_u = df[(df['water_rate'] != 0) & (df['water_rate'].notnull())]['water_rate'].median() + \
+				  iqr(df[(df['water_rate'] != 0) & (df['water_rate'].notnull())]['water_rate'], rng=(50, 75))
+	oil_iqr_u = df[(df['oil_rate'] != 0) & (df['oil_rate'].notnull())]['oil_rate'].median() + \
+				iqr(df[(df['oil_rate'] != 0) & (df['oil_rate'].notnull())]['oil_rate'], rng=(50, 75))
+	total_iqr_u = df[(df['total_rate'] != 0) & (df['total_rate'].notnull())]['total_rate'].median() + \
+				  iqr(df[(df['total_rate'] != 0) & (df['total_rate'].notnull())]['total_rate'], rng=(50, 75))
+	water_iqr_l = df[(df['water_rate'] != 0) & (df['water_rate'].notnull())]['water_rate'].median() - \
+				  iqr(df[(df['water_rate'] != 0) & (df['water_rate'].notnull())]['water_rate'], rng=(25, 50))
+	oil_iqr_l = df[(df['oil_rate'] != 0) & (df['oil_rate'].notnull())]['oil_rate'].median() - \
+				iqr(df[(df['oil_rate'] != 0) & (df['oil_rate'].notnull())]['oil_rate'], rng=(25, 50))
+	total_iqr_l = df[(df['total_rate'] != 0) & (df['total_rate'].notnull())]['total_rate'].median() - \
+				  iqr(df[(df['total_rate'] != 0) & (df['total_rate'].notnull())]['total_rate'], rng=(25, 50))
 
 	# limit_df = df[(df['total_rate'] >= 0) | (df['total_rate'].isnull()) | \
 	#               (df['oil_rate'] >= 0) | (df['oil_rate'].isnull()) | \
@@ -383,7 +387,8 @@ def rebuild(df):
 
 	water_df = limit_df[(limit_df['water'].notnull()) & \
 						(limit_df['water_rate'] <= water_iqr_u) & \
-						(limit_df['water_rate'] >= water_iqr_l)]\
+						(limit_df['water_rate'] >= water_iqr_l) & \
+						(limit_df['water_rate'] >= 0)]\
 						[['tag_prefix', 'time', 'water', 'tankcnt']]
 	water_df['TANK_TYPE'] = 'WAT'
 	water_df.rename(index=str, columns={'tag_prefix':'TAG_PREFIX', 'time':'DateKey', \
@@ -392,10 +397,15 @@ def rebuild(df):
 	water_df['CalcDate'] = water_df['DateKey']
 	return_df = return_df.append(water_df)
 
+	print(oil_iqr_l)
+	print(oil_iqr_u)
+	print(limit_df[limit_df['time'] >= '2018-01-10'].head(30))
 	oil_df = limit_df[(limit_df['oil'].notnull()) & \
 					  (limit_df['oil_rate'] <= oil_iqr_u) & \
-					  (limit_df['oil_rate'] >= oil_iqr_l)]\
+					  (limit_df['oil_rate'] >= oil_iqr_l) & \
+					  (limit_df['oil_rate'] >= 0)]\
 					  [['tag_prefix', 'time', 'oil', 'tankcnt']]
+	print(oil_df[oil_df['time'] >= '2018-01-10'].head(30))
 	oil_df['TANK_TYPE'] = 'CND'
 	oil_df.rename(index=str, columns={'tag_prefix':'TAG_PREFIX', 'time':'DateKey', \
 									  'oil':'TANKLVL', 'tankcnt':'TANKCNT'}, \
@@ -405,6 +415,7 @@ def rebuild(df):
 
 	total_df = limit_df[(limit_df['total'].notnull()) & \
 						(limit_df['total_rate'] <= total_iqr_u) & \
+						(limit_df['total_rate'] >= total_iqr_l) & \
 						(limit_df['total_rate'] >= total_iqr_l)]\
 						[['tag_prefix', 'time', 'total', 'tankcnt']]
 	total_df['TANK_TYPE'] = 'TOT'
@@ -425,11 +436,11 @@ def sql_push(df):
 									 )
 	engine = sqlalchemy.create_engine('mssql+pyodbc:///?odbc_connect=%s' % params)
 
-    # # Code to try speeding up SQL insert
+	# # Code to try speeding up SQL insert
 	# conn = engine.connect().connection
 	# cursor = conn.cursor()
 	# records = [tuple(x) for x in df.values]
-    #
+	#
 	# insert_ = """
 	# 	INSERT INTO dbo.CleanGWR
 	# 	(TAG_PREFIX
@@ -451,10 +462,34 @@ def sql_push(df):
 
 	test.to_sql('cleanGWR', engine, schema='dbo', if_exists='replace', index=False)
 
+def test_plot(df):
+	plt.close()
+	fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+
+	ax.plot(df['DateKey'], df['TANKLVL'])
+
+	cnt = 0
+	if len(ax.xaxis.get_ticklabels()) > 12:
+		for label in ax.xaxis.get_ticklabels():
+			if cnt % 17 == 0:
+				label.set_visible(True)
+			else:
+				label.set_visible(False)
+			cnt += 1
+
+	plt.xticks(rotation='vertical')
+
+	plt.savefig('images/gwr/test/{}_{}.png'.format(df['TANK_TYPE'].unique()[0], df['TAG_PREFIX'].unique()[0]))
+
 
 if __name__ == '__main__':
-	# df = rebuild(rate(tank_split(oracle_pull())))
+	# o_df = oracle_pull()
+	# df = rate(tank_split(df[df['tag_prefix'] == 'WAM-BUKDRW29-2']))
 	# df.to_csv('temp_gwr.csv')
 	df = pd.read_csv('temp_gwr.csv')
 	df.drop('Unnamed: 0', axis=1, inplace=True)
-	sql_push(df)
+	r_df = rebuild(df)
+	# sql_push(df)
+
+	for tag in ['WAM-BUKDRW29-2']:
+		test_plot(r_df[(r_df['TAG_PREFIX'] == tag) & (r_df['TANK_TYPE'] == 'CND')])
