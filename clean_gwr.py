@@ -330,6 +330,51 @@ def oracle_pull():
 
 	return df
 
+def ticket_pull():
+    try:
+        connection = pyodbc.connect(r'Driver={SQL Server Native Client 11.0};'
+                                    r'Server=SQLDW-L48.BP.Com;'
+                                    r'Database=OperationsDataMart;'
+                                    r'trusted_connection=yes'
+                                    )
+    except pyodbc.Error:
+    	print("Connection Error")
+    	sys.exit()
+
+    cursor = connection.cursor()
+    SQLCommand = ("""
+        SELECT CAST(RT.runTicketStartDate AS DATE) AS date
+			  ,PTD.TAG
+              ,RT.ticketType
+              ,RT.tankCode
+        	  ,DT.Facilitykey
+              ,RT.grossVolume
+	      FROM [TeamOptimizationEngineering].[Reporting].[PITag_Dict] AS PTD
+		  JOIN [TeamOptimizationEngineering].[dbo].[DimensionsWells] AS DW
+		  	ON DW.API = PTD.API
+          JOIN [TeamOptimizationEngineering].[dbo].[DimensionsTanks] AS DT
+        	ON DT.Facilitykey = DW.Facilitykey
+		  JOIN [EDW].[Enbase].[RunTicket] AS RT
+		    ON RT.tankCode = DT.TankCode
+         WHERE DT.BusinessUnit = 'North';
+    """)
+
+    cursor.execute(SQLCommand)
+    results = cursor.fetchall()
+
+    df = pd.DataFrame.from_records(results)
+    connection.close()
+
+    try:
+    	df.columns = pd.DataFrame(np.matrix(cursor.description))[0]
+    except:
+    	df = None
+    	print('Dataframe is empty')
+
+    df['date'] = pd.to_datetime(df['date'])
+
+    return df.drop_duplicates()
+
 def tank_split(df):
 	water_df = df[df['tank_type'] == 'WAT'][['tag_prefix', 'time', 'tankvol', 'tankcnt']]
 	water_df.columns = ['tag_prefix', 'time', 'water', 'tankcnt']
@@ -369,9 +414,9 @@ def rebuild(df):
 									  'TANKLVL', 'TANKCNT', 'CalcDate'])
 
 	# Convert DateKey into days since first day
-	df['DateKey'] = pd.to_datetime(df['DateKey'])
-	day_min = df['DateKey'].min()
-	df.loc[:,'Days'] = (df['DateKey'] - day_min).dt.total_seconds() / (24 * 60 * 60)
+	df['time'] = pd.to_datetime(df['time'])
+	day_min = df['time'].min()
+	df.loc[:,'days'] = (df['time'] - day_min).dt.total_seconds() / (24 * 60 * 60)
 
 	# Calculate IQR for rates for each tank type
 	water_iqr_u = df[(df['water_rate'] != 0) & (df['water_rate'].notnull())]['water_rate'].median() + \
@@ -393,12 +438,12 @@ def rebuild(df):
 
 	limit_df = df
 
-	w_df = df[df['TANK_TYPE'] == 'WAT']
+	w_df = df[df['water'].notnull()]
 	w_lr = LinearRegression()
-	w_lr = w_lr.fit(w_df['Days'].values.reshape(-1, 1), w_df['TANKLVL'])
-	w_y = w_lr.predict(w_df['Days'].values.reshape(-1, 1))
-	w_dev = np.std(abs(w_df['TANKLVL'] - w_y))
-	water_df = w_df[(abs(w_df['TANKLVL'] - w_y) <= 1.96 * w_dev) & \
+	w_lr = w_lr.fit(w_df['days'].values.reshape(-1, 1), w_df['water'])
+	w_y = w_lr.predict(w_df['days'].values.reshape(-1, 1))
+	w_dev = np.std(abs(w_df['water'] - w_y))
+	water_df = w_df[(abs(w_df['water'] - w_y) <= 1.96 * w_dev) & \
 					(w_df['water'].notnull())][['tag_prefix', 'time', 'water', 'tankcnt']]
 
 	# water_df = limit_df[(limit_df['water'].notnull()) & \
@@ -417,15 +462,13 @@ def rebuild(df):
 	print(limit_df['oil_rate'].min())
 	print(oil_iqr_u)
 	print(limit_df['oil_rate'].max())
-	print(limit_df[((limit_df['oil_rate'] > oil_iqr_u) | \
-					  (limit_df['oil_rate'] < oil_iqr_l)) & (limit_df['time'] >= '2018-01-10')])
 
-	o_df = df[df['TANK_TYPE'] == 'CND']
+	o_df = df[df['oil'].notnull()]
 	o_lr = LinearRegression()
-	o_lr = o_lr.fit(o_df['Days'].values.reshape(-1, 1), o_df['TANKLVL'])
-	o_y = o_lr.predict(o_df['Days'].values.reshape(-1, 1))
-	o_dev = np.std(abs(o_df['TANKLVL'] - o_y))
-	oil_df = o_df[(abs(o_df['TANKLVL'] - o_y) <= 1.96 * o_dev) & \
+	o_lr = o_lr.fit(o_df['days'].values.reshape(-1, 1), o_df['oil'])
+	o_y = o_lr.predict(o_df['days'].values.reshape(-1, 1))
+	o_dev = np.std(abs(o_df['oil'] - o_y))
+	oil_df = o_df[(abs(o_df['oil'] - o_y) <= 1.96 * o_dev) & \
 				  (o_df['oil'].notnull())][['tag_prefix', 'time', 'water', 'tankcnt']]
 
 	# oil_df = limit_df[(limit_df['oil'].notnull()) & \
@@ -511,26 +554,12 @@ def rate_plot(df):
 
 	plt.savefig('images/gwr/test/{}rate_{}.png'.format(df['TANK_TYPE'].unique()[0], df['TAG_PREFIX'].unique()[0]))
 
-def test_plot(df):
+def test_plot(df, clean_df):
 	plt.close()
 	fig, ax = plt.subplots(1, 1, figsize=(10, 10))
 
-	df['DateKey'] = pd.to_datetime(df['DateKey'])
-
-	day_min = df['DateKey'].min()
-	df.loc[:,'Days'] = (df['DateKey'] - day_min).dt.total_seconds() / (24 * 60 * 60)
-
-	lr = LinearRegression()
-	lr = lr.fit(df['Days'].values.reshape(-1, 1), df['TANKLVL'])
-	y = lr.predict(df['Days'].values.reshape(-1, 1))
-	dev = np.std(abs(df['TANKLVL'] - y))
-	lim_df = df[abs(df['TANKLVL'] - y) <= 1.96 * dev]
-
-	lr = lr.fit(lim_df['Days'].values.reshape(-1, 1), lim_df['TANKLVL'])
-	y = lr.predict(lim_df['Days'].values.reshape(-1, 1))
-
-	ax.plot(df['DateKey'], df['TANKLVL'])
-	ax.plot(lim_df['DateKey'], y, color='red')
+	ax.plot(df['time'], df['oil'])
+	ax.plot(clean_df['DateKey'], clean_df['TANKLVL'], color='red')
 
 	cnt = 0
 	if len(ax.xaxis.get_ticklabels()) > 12:
@@ -542,19 +571,30 @@ def test_plot(df):
 			cnt += 1
 
 	plt.xticks(rotation='vertical')
+	plt.title('New!')
 
-	plt.savefig('images/gwr/test/{}_{}.png'.format(df['TANK_TYPE'].unique()[0], df['TAG_PREFIX'].unique()[0]))
+	plt.savefig('images/gwr/test/{}_{}.png'.format(clean_df['TANK_TYPE'].unique()[0], \
+												   clean_df['TAG_PREFIX'].unique()[0]))
 
 
 if __name__ == '__main__':
-	o_df = oracle_pull()
-	df = rate(tank_split(o_df))
-	df.to_csv('temp_gwr.csv')
+	# o_df = oracle_pull()
+	# df = rate(tank_split(o_df))
+	# df.to_csv('temp_gwr.csv')
 	df = pd.read_csv('temp_gwr.csv')
 	df.drop('Unnamed: 0', axis=1, inplace=True)
-	r_df = rebuild(df)
+	lim_df = df[df['tag_prefix'] == 'WAM-5MILE33-60D']
+
+	# ticket_df = ticket_pull()
+	# ticket_df.to_csv('temp_ticket.csv')
+	ticket_df = pd.read_csv('temp_ticket.csv')
+	lim_df['time'] = pd.to_datetime(lim_df['time'])
+	tic_df = ticket_df[ticket_df['TAG'] == 'WAM-5MILE33-60D']
+
+	r_df = rebuild(lim_df[lim_df['time'] >= tic_df['date'].max()])
 	# sql_push(df)
 
 	for tag in ['WAM-5MILE33-60D']:
-		rate_plot(r_df[(r_df['TAG_PREFIX'] == tag) & (r_df['TANK_TYPE'] == 'CND')])
-		test_plot(r_df[(r_df['TAG_PREFIX'] == tag) & (r_df['TANK_TYPE'] == 'CND')])
+		# rate_plot(r_df[(r_df['TAG_PREFIX'] == tag) & (r_df['TANK_TYPE'] == 'CND')])
+		test_plot(lim_df[lim_df['tag_prefix'] == tag], \
+				  r_df[(r_df['TAG_PREFIX'] == tag) & (r_df['TANK_TYPE'] == 'CND')])
