@@ -425,7 +425,7 @@ def rebuild(df):
 		w_df = df[df['water'].notnull()]
 		# Build a linear regression with X-degree polynomial (currently 3 works best)
 		w_lr = LinearRegression()
-		w_poly = PolynomialFeatures(3)
+		w_poly = PolynomialFeatures(5)
 		w_x_poly = w_poly.fit_transform(w_df['days'].values.reshape(-1, 1))
 		w_lr = w_lr.fit(w_x_poly, w_df['water'])
 		w_y = w_lr.predict(w_x_poly)
@@ -444,7 +444,7 @@ def rebuild(df):
 	if not df[df['oil'].notnull()].empty:
 		o_df = df[df['oil'].notnull()]
 		o_lr = LinearRegression()
-		o_poly = PolynomialFeatures(3)
+		o_poly = PolynomialFeatures(5)
 		o_x_poly = o_poly.fit_transform(o_df['days'].values.reshape(-1, 1))
 		o_lr = o_lr.fit(o_x_poly, o_df['oil'])
 		o_y = o_lr.predict(o_x_poly)
@@ -461,7 +461,7 @@ def rebuild(df):
 	if not df[df['total'].notnull()].empty:
 		t_df = df[df['total'].notnull()]
 		t_lr = LinearRegression()
-		t_poly = PolynomialFeatures(3)
+		t_poly = PolynomialFeatures(5)
 		t_x_poly = t_poly.fit_transform(t_df['days'].values.reshape(-1, 1))
 		t_lr = t_lr.fit(t_x_poly, t_df['total'])
 		t_y = t_lr.predict(t_x_poly)
@@ -528,7 +528,7 @@ def test_plot(df, clean_df):
 			else:
 				label.set_visible(False)
 			cnt += 1
-
+	plt.ylim(ymin=0)
 	plt.xticks(rotation='vertical')
 	plt.title('Cleaned GWR Data for {}'.format(clean_df['TAG_PREFIX'].unique()[0].lstrip('WAM-')))
 
@@ -537,41 +537,42 @@ def test_plot(df, clean_df):
 
 
 if __name__ == '__main__':
+	# df = rate(tank_split(oracle_pull()))
+	# df,drop('Unnamed: 0', axis=1, inplace=True)
+	# tic_df = ticket_pull()
+
 	# o_df = oracle_pull()
 	# df = rate(tank_split(o_df))
 	# df.to_csv('temp_gwr.csv')
 	df = pd.read_csv('temp_gwr.csv')
 	df.drop('Unnamed: 0', axis=1, inplace=True)
-	lim_df = df
 
 	# ticket_df = ticket_pull()
 	# ticket_df.to_csv('temp_ticket.csv')
 	tic_df = pd.read_csv('temp_ticket.csv')
 	tic_df['date'] = pd.to_datetime(tic_df['date'])
 	lim_df['time'] = pd.to_datetime(lim_df['time'])
-	# tic_df = ticket_df[ticket_df['TAG'] == 'WAM-5MILE33-60D']
 
 	r_df = pd.DataFrame()
-	for tag in lim_df['tag_prefix'].unique()[:30]:
+	for tag in df['tag_prefix'].unique()[:30]:
 		ticket = tic_df[(tic_df['ticketType'] != 'Disposition') & (tic_df['TAG'] == tag)]
-		if lim_df[(lim_df['tag_prefix'] == tag) & (lim_df['total'].notnull())].shape[0] == 0:
+		if df[(df['tag_prefix'] == tag) & (df['total'].notnull())].shape[0] == 0:
 			pass
 		elif not ticket.empty:
 			max_date = ticket['date'].max().normalize()
-			if max_date >= lim_df['time'].max().normalize():
-				max_date -= pd.Timedelta('2 days')
-			if not lim_df[(lim_df['time'] >= max_date) & (lim_df['tag_prefix'] == tag)].empty:
-				rtag_df = rebuild(lim_df[(lim_df['time'] >= max_date) & \
-							     (lim_df['tag_prefix'] == tag)])
-							    # + pd.Timedelta('1 days'))
+			if max_date + pd.Timedelta('1 days') >= df['time'].max().normalize():
+				max_date -= pd.Timedelta('3 days')
+			if not df[(df['time'] >= max_date) & (df['tag_prefix'] == tag)].empty:
+				rtag_df = rebuild(df[(lim_df['time'] >= max_date + \
+								  pd.Timedelta('1 days')) & \
+							     (df['tag_prefix'] == tag)])
 			else:
 				pass
 		else:
-			rtag_df = rebuild(lim_df[lim_df['tag_prefix'] == tag])
+			rtag_df = rebuild(df[df['tag_prefix'] == tag])
 		r_df = r_df.append(rtag_df)
-	# sql_push(df)
+	sql_push(df)
 
-	for tag in r_df['TAG_PREFIX'].unique():
-		# rate_plot(r_df[(r_df['TAG_PREFIX'] == tag) & (r_df['TANK_TYPE'] == 'CND')])
-		test_plot(lim_df[lim_df['tag_prefix'] == tag], \
-				  r_df[(r_df['TAG_PREFIX'] == tag) & (r_df['TANK_TYPE'] == 'TOT')].sort_values('DateKey'))
+	# for tag in r_df['TAG_PREFIX'].unique():
+	# 	test_plot(lim_df[lim_df['tag_prefix'] == tag], \
+	# 			  r_df[(r_df['TAG_PREFIX'] == tag) & (r_df['TANK_TYPE'] == 'TOT')].sort_values('DateKey'))
