@@ -417,7 +417,6 @@ def rebuild(df):
 	# Convert DateKey into days since first day
 	df.loc[:,'time'] = pd.to_datetime(df['time'])
 	day_min = df['time'].min()
-	print(df.shape)
 	df.loc[:,'days'] = (df['time'] - day_min).dt.total_seconds() / (24 * 60 * 60)
 
 	# Loop through the same model building process for water, oil, and total
@@ -432,7 +431,7 @@ def rebuild(df):
 		w_y = w_lr.predict(w_x_poly)
 		# Calculate standard deviation and remove values outside of a 95% CI
 		w_dev = np.std(abs(w_df['water'] - w_y))
-		water_df = w_df[(abs(w_df['water'] - w_y) <= 1.96 * w_dev) & \
+		water_df = w_df[(abs(w_df['water'] - w_y) <= 1.28 * w_dev) & \
 						(w_df['water'].notnull())][['tag_prefix', 'time', 'water', 'tankcnt']]
 		water_df.loc[:,'TANK_TYPE'] = np.full(water_df.shape[0], 'WAT')
 		# Format columns to match that in SQL Server
@@ -450,7 +449,7 @@ def rebuild(df):
 		o_lr = o_lr.fit(o_x_poly, o_df['oil'])
 		o_y = o_lr.predict(o_x_poly)
 		o_dev = np.std(abs(o_df['oil'] - o_y))
-		oil_df = o_df[(abs(o_df['oil'] - o_y) <= 1.96 * o_dev) & \
+		oil_df = o_df[(abs(o_df['oil'] - o_y) <= 1.28 * o_dev) & \
 					  (o_df['oil'].notnull())][['tag_prefix', 'time', 'oil', 'tankcnt']]
 		oil_df.loc[:,'TANK_TYPE'] = np.full(oil_df.shape[0], 'CND')
 		oil_df.rename(index=str, columns={'tag_prefix':'TAG_PREFIX', 'time':'DateKey', \
@@ -460,15 +459,15 @@ def rebuild(df):
 		return_df = return_df.append(oil_df)
 
 	if not df[df['total'].notnull()].empty:
-		t_df = df[df['oil'].notnull()]
+		t_df = df[df['total'].notnull()]
 		t_lr = LinearRegression()
 		t_poly = PolynomialFeatures(3)
 		t_x_poly = t_poly.fit_transform(t_df['days'].values.reshape(-1, 1))
-		t_lr = t_lr.fit(t_x_poly, t_df['water'])
+		t_lr = t_lr.fit(t_x_poly, t_df['total'])
 		t_y = t_lr.predict(t_x_poly)
-		t_dev = np.std(abs(t_df['oil'] - t_y))
-		total_df = t_df[(abs(t_df['oil'] - t_y) <= 1.96 * t_dev) & \
-					  (t_df['oil'].notnull())][['tag_prefix', 'time', 'oil', 'tankcnt']]
+		t_dev = np.std(abs(t_df['total'] - t_y))
+		total_df = t_df[(abs(t_df['total'] - t_y) <= 1.28 * t_dev) & \
+					  (t_df['total'].notnull())][['tag_prefix', 'time', 'total', 'tankcnt']]
 		total_df.loc[:,'TANK_TYPE'] = np.full(total_df.shape[0], 'TOT')
 		total_df.rename(index=str, columns={'tag_prefix':'TAG_PREFIX', 'time':'DateKey', \
 											'total':'TANKLVL', 'tankcnt':'TANKCNT'}, \
@@ -518,7 +517,7 @@ def test_plot(df, clean_df):
 	plt.close()
 	fig, ax = plt.subplots(1, 1, figsize=(10, 10))
 
-	ax.plot(df['time'], df['oil'], label='GWR Reading')
+	ax.plot(df['time'], df['total'], label='GWR Reading')
 	ax.plot(clean_df['DateKey'], clean_df['TANKLVL'], color='red', label='Cleaned Values')
 
 	cnt = 0
@@ -538,15 +537,15 @@ def test_plot(df, clean_df):
 
 
 if __name__ == '__main__':
-	o_df = oracle_pull()
-	df = rate(tank_split(o_df))
-	df.to_csv('temp_gwr.csv')
+	# o_df = oracle_pull()
+	# df = rate(tank_split(o_df))
+	# df.to_csv('temp_gwr.csv')
 	df = pd.read_csv('temp_gwr.csv')
 	df.drop('Unnamed: 0', axis=1, inplace=True)
 	lim_df = df
 
-	ticket_df = ticket_pull()
-	ticket_df.to_csv('temp_ticket.csv')
+	# ticket_df = ticket_pull()
+	# ticket_df.to_csv('temp_ticket.csv')
 	tic_df = pd.read_csv('temp_ticket.csv')
 	tic_df['date'] = pd.to_datetime(tic_df['date'])
 	lim_df['time'] = pd.to_datetime(lim_df['time'])
@@ -554,16 +553,19 @@ if __name__ == '__main__':
 
 	r_df = pd.DataFrame()
 	for tag in lim_df['tag_prefix'].unique()[:30]:
-		# (tic_df['ticketType'] == 'Oil Haul') &
-		print(tag)
-		ticket = tic_df[(tic_df['ticketType'] == 'Disposition') & (tic_df['TAG'] == tag)]
-		print(ticket)
-		if lim_df[(lim_df['tag_prefix'] == tag) & (lim_df['oil'].notnull())].shape[0] == 0:
+		ticket = tic_df[(tic_df['ticketType'] != 'Disposition') & (tic_df['TAG'] == tag)]
+		if lim_df[(lim_df['tag_prefix'] == tag) & (lim_df['total'].notnull())].shape[0] == 0:
 			pass
 		elif not ticket.empty:
-			rtag_df = rebuild(lim_df[(lim_df['time'] >= ticket['date'].max() + \
-						   pd.Timedelta('1 days')) & \
-						   (lim_df['tag_prefix'] == tag)])
+			max_date = ticket['date'].max().normalize()
+			if max_date >= lim_df['time'].max().normalize():
+				max_date -= pd.Timedelta('2 days')
+			if not lim_df[(lim_df['time'] >= max_date) & (lim_df['tag_prefix'] == tag)].empty:
+				rtag_df = rebuild(lim_df[(lim_df['time'] >= max_date) & \
+							     (lim_df['tag_prefix'] == tag)])
+							    # + pd.Timedelta('1 days'))
+			else:
+				pass
 		else:
 			rtag_df = rebuild(lim_df[lim_df['tag_prefix'] == tag])
 		r_df = r_df.append(rtag_df)
@@ -572,4 +574,4 @@ if __name__ == '__main__':
 	for tag in r_df['TAG_PREFIX'].unique():
 		# rate_plot(r_df[(r_df['TAG_PREFIX'] == tag) & (r_df['TANK_TYPE'] == 'CND')])
 		test_plot(lim_df[lim_df['tag_prefix'] == tag], \
-				  r_df[(r_df['TAG_PREFIX'] == tag) & (r_df['TANK_TYPE'] == 'CND')].sort_values('DateKey'))
+				  r_df[(r_df['TAG_PREFIX'] == tag) & (r_df['TANK_TYPE'] == 'TOT')].sort_values('DateKey'))
