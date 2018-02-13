@@ -479,6 +479,27 @@ def rebuild(df):
 
 	return return_df.sort_values(['TAG_PREFIX', 'DateKey'])
 
+def build_loop(df, tic_df):
+	r_df = pd.DataFrame()
+	for tag in df['tag_prefix'].unique():
+		ticket = tic_df[(tic_df['ticketType'] != 'Disposition') & (tic_df['TAG'] == tag)]
+		if df[(df['tag_prefix'] == tag) & (df['total'].notnull())].shape[0] == 0:
+			pass
+		elif not ticket.empty:
+			max_date = ticket['date'].max().normalize()
+			if max_date + pd.Timedelta('1 days') >= df['time'].max().normalize():
+				max_date -= pd.Timedelta('3 days')
+			if not df[(df['time'] >= max_date) & (df['tag_prefix'] == tag)].empty:
+				rtag_df = rebuild(df[(lim_df['time'] >= max_date + \
+								  pd.Timedelta('1 days')) & \
+							     (df['tag_prefix'] == tag)])
+			else:
+				pass
+		else:
+			rtag_df = rebuild(df[df['tag_prefix'] == tag])
+		r_df = r_df.append(rtag_df)
+	return r_df
+
 def sql_push(df):
 	params = urllib.parse.quote_plus('Driver={SQL Server Native Client 11.0};\
 									 Server=SQLDW-TEST-L48.BP.Com;\
@@ -537,41 +558,26 @@ def test_plot(df, clean_df):
 
 
 if __name__ == '__main__':
-	# df = rate(tank_split(oracle_pull()))
-	# df,drop('Unnamed: 0', axis=1, inplace=True)
-	# tic_df = ticket_pull()
+	df = rate(tank_split(oracle_pull()))
+	df,drop('Unnamed: 0', axis=1, inplace=True)
+	tic_df = ticket_pull()
+	tic_df['date'] = pd.to_datetime(tic_df['date'])
+	df['time'] = pd.to_datetime(lim_df['time'])
+	sql_push(build_loop(df, tic_df))
 
 	# o_df = oracle_pull()
 	# df = rate(tank_split(o_df))
 	# df.to_csv('temp_gwr.csv')
-	df = pd.read_csv('temp_gwr.csv')
-	df.drop('Unnamed: 0', axis=1, inplace=True)
+	# df = pd.read_csv('temp_gwr.csv')
+	# df.drop('Unnamed: 0', axis=1, inplace=True)
 
 	# ticket_df = ticket_pull()
 	# ticket_df.to_csv('temp_ticket.csv')
-	tic_df = pd.read_csv('temp_ticket.csv')
-	tic_df['date'] = pd.to_datetime(tic_df['date'])
-	lim_df['time'] = pd.to_datetime(lim_df['time'])
-
-	r_df = pd.DataFrame()
-	for tag in df['tag_prefix'].unique()[:30]:
-		ticket = tic_df[(tic_df['ticketType'] != 'Disposition') & (tic_df['TAG'] == tag)]
-		if df[(df['tag_prefix'] == tag) & (df['total'].notnull())].shape[0] == 0:
-			pass
-		elif not ticket.empty:
-			max_date = ticket['date'].max().normalize()
-			if max_date + pd.Timedelta('1 days') >= df['time'].max().normalize():
-				max_date -= pd.Timedelta('3 days')
-			if not df[(df['time'] >= max_date) & (df['tag_prefix'] == tag)].empty:
-				rtag_df = rebuild(df[(lim_df['time'] >= max_date + \
-								  pd.Timedelta('1 days')) & \
-							     (df['tag_prefix'] == tag)])
-			else:
-				pass
-		else:
-			rtag_df = rebuild(df[df['tag_prefix'] == tag])
-		r_df = r_df.append(rtag_df)
-	sql_push(df)
+	# tic_df = pd.read_csv('temp_ticket.csv')
+	# tic_df['date'] = pd.to_datetime(tic_df['date'])
+	# df['time'] = pd.to_datetime(lim_df['time'])
+	# build_loop(df, tic_df)
+	# sql_push(df)
 
 	# for tag in r_df['TAG_PREFIX'].unique():
 	# 	test_plot(lim_df[lim_df['tag_prefix'] == tag], \
