@@ -393,19 +393,19 @@ def tank_split(df):
 	return df.sort_values(['tag_prefix', 'time'])
 
 def rate(df):
-	df['oil_rate'] = np.nan
-	df['water_rate'] = np.nan
-	df['total_rate'] = np.nan
+	df.loc[:,'oil_rate'] = np.nan
+	df.loc[:,'water_rate'] = np.nan
+	df.loc[:,'total_rate'] = np.nan
 	for tag in df['tag_prefix'].unique():
 		df.loc[df['tag_prefix'] == tag, 'oil_rate'] = \
-				 df[df['tag_prefix'] == tag]['oil'].shift(-2) - \
-				 df[df['tag_prefix'] == tag]['oil'].shift(2)
+			   df[df['tag_prefix'] == tag]['oil'].shift(-2) - \
+			   df[df['tag_prefix'] == tag]['oil'].shift(2)
 		df.loc[df['tag_prefix'] == tag, 'water_rate'] = \
-				 df[df['tag_prefix'] == tag]['water'] - \
-				 df[df['tag_prefix'] == tag]['water'].shift(1)
+			   df[df['tag_prefix'] == tag]['water'] - \
+			   df[df['tag_prefix'] == tag]['water'].shift(1)
 		df.loc[df['tag_prefix'] == tag, 'total_rate'] = \
-				 df[df['tag_prefix'] == tag]['total'] - \
-				 df[df['tag_prefix'] == tag]['total'].shift(1)
+			   df[df['tag_prefix'] == tag]['total'] - \
+			   df[df['tag_prefix'] == tag]['total'].shift(1)
 		tanks = df[df['tag_prefix'] == tag]['tankcnt'].max()
 		df.drop(df[(df['tag_prefix'] == tag) & (df['tankcnt'] < tanks)].index, inplace=True)
 	return df.sort_values(['tag_prefix', 'time'])
@@ -417,31 +417,25 @@ def rebuild(df):
 	# Convert DateKey into days since first day
 	df.loc[:,'time'] = pd.to_datetime(df['time'])
 	day_min = df['time'].min()
+	print(df.shape)
 	df.loc[:,'days'] = (df['time'] - day_min).dt.total_seconds() / (24 * 60 * 60)
 
-	# # Calculate IQR for rates for each tank type
-	# water_iqr_u = df[(df['water_rate'] != 0) & (df['water_rate'].notnull())]['water_rate'].median() + \
-	# 			  iqr(df[(df['water_rate'] != 0) & (df['water_rate'].notnull())]['water_rate'], rng=(50, 75))
-	# oil_iqr_u = df[(df['oil_rate'] != 0) & (df['oil_rate'].notnull())]['oil_rate'].median() + \
-	# 			iqr(df[(df['oil_rate'] != 0) & (df['oil_rate'].notnull())]['oil_rate'], rng=(50, 75))
-	# total_iqr_u = df[(df['total_rate'] != 0) & (df['total_rate'].notnull())]['total_rate'].median() + \
-	# 			  iqr(df[(df['total_rate'] != 0) & (df['total_rate'].notnull())]['total_rate'], rng=(50, 75))
-	# water_iqr_l = df[(df['water_rate'] != 0) & (df['water_rate'].notnull())]['water_rate'].median() - \
-	# 			  iqr(df[(df['water_rate'] != 0) & (df['water_rate'].notnull())]['water_rate'], rng=(25, 50))
-	# oil_iqr_l = df[(df['oil_rate'] != 0) & (df['oil_rate'].notnull())]['oil_rate'].median() - \
-	# 			iqr(df[(df['oil_rate'] != 0) & (df['oil_rate'].notnull())]['oil_rate'], rng=(25, 50))
-	# total_iqr_l = df[(df['total_rate'] != 0) & (df['total_rate'].notnull())]['total_rate'].median() - \
-	# 			  iqr(df[(df['total_rate'] != 0) & (df['total_rate'].notnull())]['total_rate'], rng=(25, 50))
-
+	# Loop through the same model building process for water, oil, and total
 	if not df[df['water'].notnull()].empty:
+		# Remove null values for model building
 		w_df = df[df['water'].notnull()]
+		# Build a linear regression with X-degree polynomial (currently 3 works best)
 		w_lr = LinearRegression()
-		w_lr = w_lr.fit(w_df['days'].values.reshape(-1, 1), w_df['water'])
-		w_y = w_lr.predict(w_df['days'].values.reshape(-1, 1))
+		w_poly = PolynomialFeatures(3)
+		w_x_poly = w_poly.fit_transform(w_df['days'].values.reshape(-1, 1))
+		w_lr = w_lr.fit(w_x_poly, w_df['water'])
+		w_y = w_lr.predict(w_x_poly)
+		# Calculate standard deviation and remove values outside of a 95% CI
 		w_dev = np.std(abs(w_df['water'] - w_y))
 		water_df = w_df[(abs(w_df['water'] - w_y) <= 1.96 * w_dev) & \
 						(w_df['water'].notnull())][['tag_prefix', 'time', 'water', 'tankcnt']]
-		water_df.loc[:,'TANK_TYPE'] = 'WAT'
+		water_df.loc[:,'TANK_TYPE'] = np.full(water_df.shape[0], 'WAT')
+		# Format columns to match that in SQL Server
 		water_df.rename(index=str, columns={'tag_prefix':'TAG_PREFIX', 'time':'DateKey', \
 											'water':'TANKLVL', 'tankcnt':'TANKCNT'}, \
 											inplace=True)
@@ -451,14 +445,14 @@ def rebuild(df):
 	if not df[df['oil'].notnull()].empty:
 		o_df = df[df['oil'].notnull()]
 		o_lr = LinearRegression()
-		o_poly = PolynomialFeatures(5)
+		o_poly = PolynomialFeatures(3)
 		o_x_poly = o_poly.fit_transform(o_df['days'].values.reshape(-1, 1))
 		o_lr = o_lr.fit(o_x_poly, o_df['oil'])
 		o_y = o_lr.predict(o_x_poly)
 		o_dev = np.std(abs(o_df['oil'] - o_y))
 		oil_df = o_df[(abs(o_df['oil'] - o_y) <= 1.96 * o_dev) & \
 					  (o_df['oil'].notnull())][['tag_prefix', 'time', 'oil', 'tankcnt']]
-		oil_df.loc[:,'TANK_TYPE'] = 'CND'
+		oil_df.loc[:,'TANK_TYPE'] = np.full(oil_df.shape[0], 'CND')
 		oil_df.rename(index=str, columns={'tag_prefix':'TAG_PREFIX', 'time':'DateKey', \
 										  'oil':'TANKLVL', 'tankcnt':'TANKCNT'}, \
 										  inplace=True)
@@ -468,12 +462,14 @@ def rebuild(df):
 	if not df[df['total'].notnull()].empty:
 		t_df = df[df['oil'].notnull()]
 		t_lr = LinearRegression()
-		t_lr = t_lr.fit(t_df['days'].values.reshape(-1, 1), t_df['oil'])
-		t_y = t_lr.predict(t_df['days'].values.reshape(-1, 1))
+		t_poly = PolynomialFeatures(3)
+		t_x_poly = t_poly.fit_transform(t_df['days'].values.reshape(-1, 1))
+		t_lr = t_lr.fit(t_x_poly, t_df['water'])
+		t_y = t_lr.predict(t_x_poly)
 		t_dev = np.std(abs(t_df['oil'] - t_y))
 		total_df = t_df[(abs(t_df['oil'] - t_y) <= 1.96 * t_dev) & \
 					  (t_df['oil'].notnull())][['tag_prefix', 'time', 'oil', 'tankcnt']]
-		total_df.loc[:,'TANK_TYPE'] = 'TOT'
+		total_df.loc[:,'TANK_TYPE'] = np.full(total_df.shape[0], 'TOT')
 		total_df.rename(index=str, columns={'tag_prefix':'TAG_PREFIX', 'time':'DateKey', \
 											'total':'TANKLVL', 'tankcnt':'TANKCNT'}, \
 											inplace=True)
@@ -542,23 +538,26 @@ def test_plot(df, clean_df):
 
 
 if __name__ == '__main__':
-	# o_df = oracle_pull()
-	# df = rate(tank_split(o_df))
-	# df.to_csv('temp_gwr.csv')
+	o_df = oracle_pull()
+	df = rate(tank_split(o_df))
+	df.to_csv('temp_gwr.csv')
 	df = pd.read_csv('temp_gwr.csv')
 	df.drop('Unnamed: 0', axis=1, inplace=True)
 	lim_df = df
 
-	# ticket_df = ticket_pull()
-	# ticket_df.to_csv('temp_ticket.csv')
+	ticket_df = ticket_pull()
+	ticket_df.to_csv('temp_ticket.csv')
 	tic_df = pd.read_csv('temp_ticket.csv')
 	tic_df['date'] = pd.to_datetime(tic_df['date'])
 	lim_df['time'] = pd.to_datetime(lim_df['time'])
 	# tic_df = ticket_df[ticket_df['TAG'] == 'WAM-5MILE33-60D']
 
 	r_df = pd.DataFrame()
-	for tag in lim_df['tag_prefix'].unique()[:10]:
-		ticket = tic_df[(tic_df['ticketType'] == 'Oil Haul') & (tic_df['TAG'] == tag)]
+	for tag in lim_df['tag_prefix'].unique()[:30]:
+		# (tic_df['ticketType'] == 'Oil Haul') &
+		print(tag)
+		ticket = tic_df[(tic_df['ticketType'] == 'Disposition') & (tic_df['TAG'] == tag)]
+		print(ticket)
 		if lim_df[(lim_df['tag_prefix'] == tag) & (lim_df['oil'].notnull())].shape[0] == 0:
 			pass
 		elif not ticket.empty:
