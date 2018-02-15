@@ -417,9 +417,6 @@ def rebuild(df):
 
 	# Convert DateKey into days since first day
 	df.loc[:,'time'] = pd.to_datetime(df['time'])
-	day_min = df['time'].min()
-	print(day_min)
-	print(df['time'].shape)
 	df.loc[:,'days'] = (df['time'] - day_min).dt.total_seconds() / (24 * 60 * 60)
 
 	# Loop through the same model building process for water, oil, and total
@@ -541,11 +538,8 @@ def build_loop(df, tic_df):
 		if df[(df['tag_prefix'] == tag) & (df['oil'].notnull())].shape[0] == 0:
 			pass
 		elif not ticket.empty:
-			print('check me out!')
 			max_date = ticket['date'].max().normalize()
-			print(max_date)
-			print(df['time'].max())
-			if max_date + pd.Timedelta('1 days') >= df['time'].max().normalize():
+			if max_date + pd.Timedelta('2 days') >= df['time'].max().normalize():
 				max_date -= pd.Timedelta('3 days')
 			if not df[(df['time'] >= max_date) & (df['tag_prefix'] == tag)].empty:
 				rtag_df = rebuild(df[(df['time'] >= max_date + \
@@ -634,28 +628,25 @@ def rate_plot(df):
 
 
 if __name__ == '__main__':
-	# df = rate(tank_split(oracle_pull()))
-	# tic_df = ticket_pull()
-	# tic_df['date'] = pd.to_datetime(tic_df['date'])
-	# df['time'] = pd.to_datetime(df['time'])
-	# sql_push(build_loop(df, tic_df))
+	df = rate(tank_split(oracle_pull()))
+	tic_df = ticket_pull()
+	tic_df['date'] = pd.to_datetime(tic_df['date'])
+	df['time'] = pd.to_datetime(df['time'])
+	sql_push(build_loop(df, tic_df))
 
 	# o_df = oracle_pull()
 	# df = rate(tank_split(o_df))
 	# df.to_csv('temp_gwr.csv')
-	df = pd.read_csv('temp_gwr.csv')
-	df.drop('Unnamed: 0', axis=1, inplace=True)
+	# df = pd.read_csv('temp_gwr.csv')
+	# df.drop('Unnamed: 0', axis=1, inplace=True)
 
 	# ticket_df = ticket_pull()
 	# ticket_df.to_csv('temp_ticket.csv')
-	tic_df = pd.read_csv('temp_ticket.csv')
-	tic_df['date'] = pd.to_datetime(tic_df['date'])
-	df['time'] = pd.to_datetime(df['time'])
-	tag_list = ['WAM-ML11_150H', 'WAM-ML11_160H', 'WAM-ML11_160D', 'WAM-BB19', \
-				'WAM-CL29_150H', 'WAM-CH320C1', 'WAM-HP13_150H', \
-				'WAM-CL29_160H', 'WAM-LM8_115H']
-	r_df = build_loop(df, tic_df)
-	sql_push(df)
+	# tic_df = pd.read_csv('temp_ticket.csv')
+	# tic_df['date'] = pd.to_datetime(tic_df['date'])
+	# df['time'] = pd.to_datetime(df['time'])
+	# r_df = build_loop(df, tic_df)
+	# sql_push(r_df)
 
 	# for tag in r_df['TAG_PREFIX'].unique():
 	# 	test_plot(df[(df['tag_prefix'] == tag) & (df['time'] >= '02-01-2018')], \
