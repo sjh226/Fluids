@@ -443,7 +443,7 @@ def rebuild(df):
 		water_df = w_df[['tag_prefix', 'time', 'water', 'tankcnt']]
 		water_df.loc[:,'predict'] = w_y
 		# Calculate rates from predicted values
-		water_df.loc[:,'rate'] = water_df['predict'] - water_df['predict'].shift(1) / \
+		water_df.loc[:,'rate'] = (water_df['predict'] - water_df['predict'].shift(1)) / \
 								 ((water_df['time'] - water_df['time'].shift(1)) / \
 								 np.timedelta64(1, 'h'))
 		# Forward fill any negative rate
@@ -474,12 +474,12 @@ def rebuild(df):
 		o_y = o_lr.predict(o_pred_poly)
 		oil_df = o_df[['tag_prefix', 'time', 'oil', 'tankcnt']]
 		oil_df.loc[:,'predict'] = o_y
-		oil_df.loc[:,'rate'] = oil_df['predict'] - oil_df['predict'].shift(1) / \
+		oil_df.loc[:,'rate'] = (oil_df['predict'] - oil_df['predict'].shift(1)) / \
 							   ((oil_df['time'] - oil_df['time'].shift(1)) / \
 							   np.timedelta64(1, 'h'))
 		oil_df.loc[oil_df['rate'] < 0, 'rate'] = np.nan
-		# oil_df['rate'].fillna(method='ffill', inplace=True)
-		# oil_df['rate'].fillna(method='bfill', inplace=True)
+		oil_df['rate'].fillna(method='ffill', inplace=True)
+		oil_df['rate'].fillna(method='bfill', inplace=True)
 		oil_df.loc[:,'TANK_TYPE'] = np.full(oil_df.shape[0], 'CND')
 		oil_df.rename(index=str, columns={'tag_prefix':'TAG_PREFIX', 'time':'DateKey', \
 										  'oil':'TANKLVL', 'tankcnt':'TANKCNT'}, \
@@ -500,10 +500,10 @@ def rebuild(df):
 		t_x_poly = t_poly.fit_transform(total_df['days'].values.reshape(-1, 1))
 		t_lr = t_lr.fit(t_x_poly, total_df['total'])
 		t_pred_poly = t_poly.fit_transform(t_df['days'].values.reshape(-1, 1))
-		t_y = o_lr.predict(t_pred_poly)
-		total_df = o_df[['tag_prefix', 'time', 'total', 'tankcnt']]
+		t_y = t_lr.predict(t_pred_poly)
+		total_df = t_df[['tag_prefix', 'time', 'total', 'tankcnt']]
 		total_df.loc[:,'predict'] = t_y
-		total_df.loc[:,'rate'] = total_df['predict'] - total_df['predict'].shift(1) / \
+		total_df.loc[:,'rate'] = (total_df['predict'] - total_df['predict'].shift(1)) / \
 								 ((total_df['time'] - total_df['time'].shift(1)) / \
 								 np.timedelta64(1, 'h'))
 		total_df.loc[total_df['rate'] < 0, 'rate'] = np.nan
@@ -516,7 +516,8 @@ def rebuild(df):
 		total_df.loc[:,'CalcDate'] = total_df['DateKey']
 		return_df = return_df.append(total_df)
 
-	return_df = return_df[['TAG_PREFIX', 'DateKey', 'TANK_TYPE', 'TANKLVL', 'predict', 'rate', 'TANKCNT', 'CalcDate']]
+	return_df = return_df[['TAG_PREFIX', 'DateKey', 'TANK_TYPE', 'TANKLVL', \
+						   'predict', 'rate', 'TANKCNT', 'CalcDate']]
 
 	return return_df.sort_values(['TAG_PREFIX', 'DateKey'])
 
@@ -638,31 +639,10 @@ if __name__ == '__main__':
 	tag_list = ['WAM-ML11_150H', 'WAM-ML11_160H', 'WAM-ML11_160D', 'WAM-BB19', \
 				'WAM-CL29_150H', 'WAM-CH320C1', 'WAM-HP13_150H', \
 				'WAM-CL29_160H', 'WAM-LM8_115H']
-	r_df = build_loop(df[df['tag_prefix'].str.contains('|'.join(tag_list))], tic_df)
-	# sql_push(df)
+	r_df = build_loop(df, tic_df)
+	sql_push(df)
 
-	# new_df = r_df[r_df['TANK_TYPE'] == 'CND']
-	# new_df['rate'] = np.nan
 	# for tag in r_df['TAG_PREFIX'].unique():
-	# 	new_df.loc[new_df['TAG_PREFIX'] == tag, 'rate'] = \
-	# 		(new_df[new_df['TAG_PREFIX'] == tag]['TANKLVL'] - \
-	# 		new_df[new_df['TAG_PREFIX'] == tag]['TANKLVL'].shift(1)) / \
-	# 		((new_df[new_df['TAG_PREFIX'] == tag]['CalcDate'] - \
-	# 		new_df[new_df['TAG_PREFIX'] == tag]['CalcDate'].shift(1))/ np.timedelta64(1, 'h'))
-	# new_df[new_df['rate'] <= 0] = 0
-	# new_df = new_df[new_df['CalcDate'] >= '02-07-2018']
-
-	# daily_df = new_df[['TAG_PREFIX', 'DateKey', 'TANK_TYPE', 'rate']]
-	# daily_df['DateKey'] = daily_df['DateKey'].dt.normalize()
-	# daily_df = daily_df.groupby(['TAG_PREFIX', 'DateKey', 'TANK_TYPE'], as_index=False).sum()
-	# daily_df.rename(index=str, columns={'rate':'DailyRate'}, inplace=True)
-
-	# new_tic = new_df
-	# new_tic['CalcDate'] = new_tic['CalcDate'].dt.normalize()
-	# this = pd.merge(new_tic[new_tic['DateKey'] >= '02-01-2018'], \
-	# 				tic_df[tic_df['date'] >= '02-01-2018'], how='left', left_on=['TAG_PREFIX', 'CalcDate'], right_on=['TAG', 'date'])
-
-	for tag in r_df['TAG_PREFIX'].unique():
-		test_plot(df[(df['tag_prefix'] == tag) & (df['time'] >= '02-01-2018')], \
-				  r_df[(r_df['TAG_PREFIX'] == tag) & (r_df['TANK_TYPE'] == 'CND')].sort_values('DateKey'))
-		# rate_plot(new_df[(new_df['TAG_PREFIX'] == tag) & (new_df['DateKey'] >= '02-01-2018')].sort_values('DateKey'))
+	# 	test_plot(df[(df['tag_prefix'] == tag) & (df['time'] >= '02-01-2018')], \
+	# 			  r_df[(r_df['TAG_PREFIX'] == tag) & (r_df['TANK_TYPE'] == 'CND')].sort_values('DateKey'))
+	# 	rate_plot(r_df[(r_df['TAG_PREFIX'] == tag) & (r_df['DateKey'] >= '02-01-2018')].sort_values('DateKey'))
