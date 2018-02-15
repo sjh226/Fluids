@@ -9,6 +9,7 @@ import urllib
 import matplotlib.pyplot as plt
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import PolynomialFeatures
+import time
 
 
 def oracle_pull():
@@ -417,6 +418,8 @@ def rebuild(df):
 
 	# Convert DateKey into days since first day
 	df.loc[:,'time'] = pd.to_datetime(df['time'])
+	day_min = df['time'].min()
+	print(day_min)
 	df.loc[:,'days'] = (df['time'] - day_min).dt.total_seconds() / (24 * 60 * 60)
 
 	# Loop through the same model building process for water, oil, and total
@@ -452,7 +455,7 @@ def rebuild(df):
 		# Forward fill any negative rate
 		water_df.loc[water_df['rate'] < 0, 'rate'] = np.nan
 		water_df['rate'].fillna(method='ffill', inplace=True)
-		# water_df['rate'].fillna(method='bfill', inplace=True)
+		water_df['rate'].fillna(method='bfill', inplace=True)
 		water_df.loc[:,'TANK_TYPE'] = np.full(water_df.shape[0], 'WAT')
 		# Format columns to match that in SQL Server
 		water_df.rename(index=str, columns={'tag_prefix':'TAG_PREFIX', 'time':'DateKey', \
@@ -583,9 +586,7 @@ def sql_push(df):
 	#     cursor.execute(insert_rows)
 	#     conn.commit()
 
-	test = df.iloc[:200]
-
-	test.to_sql('cleanGWR', engine, schema='dbo', if_exists='replace', index=False)
+	df.to_sql('cleanGWR', engine, schema='dbo', if_exists='replace', index=False)
 
 def test_plot(df, clean_df):
 	plt.close()
@@ -628,11 +629,18 @@ def rate_plot(df):
 
 
 if __name__ == '__main__':
-	df = rate(tank_split(oracle_pull()))
-	tic_df = ticket_pull()
+	# t0 = time.time()
+	# df = rate(tank_split(oracle_pull()))
+	# df.to_csv('temp_gwr.csv')
+	df = pd.read_csv('temp_gwr.csv')
+	# tic_df = ticket_pull()
+	# tic_df.to_csv('temp_ticket.csv')
+	tic_df = pd.read_csv('temp_ticket.csv')
 	tic_df['date'] = pd.to_datetime(tic_df['date'])
 	df['time'] = pd.to_datetime(df['time'])
 	sql_push(build_loop(df, tic_df))
+	t1 = time.time()
+	print('Took {} seconds to run.'.format(t1-t0))
 
 	# o_df = oracle_pull()
 	# df = rate(tank_split(o_df))
