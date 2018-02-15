@@ -418,6 +418,8 @@ def rebuild(df):
 	# Convert DateKey into days since first day
 	df.loc[:,'time'] = pd.to_datetime(df['time'])
 	day_min = df['time'].min()
+	print(day_min)
+	print(df['time'].shape)
 	df.loc[:,'days'] = (df['time'] - day_min).dt.total_seconds() / (24 * 60 * 60)
 
 	# Loop through the same model building process for water, oil, and total
@@ -431,9 +433,13 @@ def rebuild(df):
 		w_lr = w_lr.fit(w_x_poly, w_df['water'])
 		w_y = w_lr.predict(w_x_poly)
 		# Calculate standard deviation and remove values outside of a 95% CI
+		# Catch for if STD is 0 (straight line in data)
 		w_dev = np.std(abs(w_df['water'] - w_y))
-		water_df = w_df[(abs(w_df['water'] - w_y) <= 1.96 * w_dev) & \
-						(w_df['water'].notnull())][['tag_prefix', 'time', 'water', 'tankcnt', 'days']]
+		if w_dev != 0:
+			water_df = w_df[(abs(w_df['water'] - w_y) <= 1.96 * w_dev) & \
+						  (w_df['water'].notnull())][['tag_prefix', 'time', 'water', 'tankcnt', 'days']]
+		else:
+			water_df = w_df[w_df['water'].notnull()][['tag_prefix', 'time', 'water', 'tankcnt', 'days']]
 		# Refit regression on cleaned data
 		w_x_poly = w_poly.fit_transform(water_df['days'].values.reshape(-1, 1))
 		w_lr = w_lr.fit(w_x_poly, water_df['water'])
@@ -466,8 +472,11 @@ def rebuild(df):
 		o_lr = o_lr.fit(o_x_poly, o_df['oil'])
 		o_y = o_lr.predict(o_x_poly)
 		o_dev = np.std(abs(o_df['oil'] - o_y))
-		oil_df = o_df[(abs(o_df['oil'] - o_y) <= 1.96 * o_dev) & \
-					  (o_df['oil'].notnull())][['tag_prefix', 'time', 'oil', 'tankcnt', 'days']]
+		if o_dev != 0:
+			oil_df = o_df[(abs(o_df['oil'] - o_y) <= 1.96 * o_dev) & \
+						  (o_df['oil'].notnull())][['tag_prefix', 'time', 'oil', 'tankcnt', 'days']]
+		else:
+			oil_df = o_df[o_df['oil'].notnull()][['tag_prefix', 'time', 'oil', 'tankcnt', 'days']]
 		o_x_poly = o_poly.fit_transform(oil_df['days'].values.reshape(-1, 1))
 		o_lr = o_lr.fit(o_x_poly, oil_df['oil'])
 		o_pred_poly = o_poly.fit_transform(o_df['days'].values.reshape(-1, 1))
@@ -495,8 +504,11 @@ def rebuild(df):
 		t_lr = t_lr.fit(t_x_poly, t_df['total'])
 		t_y = t_lr.predict(t_x_poly)
 		t_dev = np.std(abs(t_df['total'] - t_y))
-		total_df = t_df[(abs(t_df['total'] - t_y) <= 1.96 * t_dev) & \
-					  (t_df['total'].notnull())][['tag_prefix', 'time', 'total', 'tankcnt', 'days']]
+		if t_dev != 0:
+			total_df = t_df[(abs(t_df['total'] - t_y) <= 1.96 * t_dev) & \
+						  (t_df['total'].notnull())][['tag_prefix', 'time', 'total', 'tankcnt', 'days']]
+		else:
+			total_df = t_df[t_df['total'].notnull()][['tag_prefix', 'time', 'total', 'tankcnt', 'days']]
 		t_x_poly = t_poly.fit_transform(total_df['days'].values.reshape(-1, 1))
 		t_lr = t_lr.fit(t_x_poly, total_df['total'])
 		t_pred_poly = t_poly.fit_transform(t_df['days'].values.reshape(-1, 1))
@@ -529,7 +541,10 @@ def build_loop(df, tic_df):
 		if df[(df['tag_prefix'] == tag) & (df['oil'].notnull())].shape[0] == 0:
 			pass
 		elif not ticket.empty:
+			print('check me out!')
 			max_date = ticket['date'].max().normalize()
+			print(max_date)
+			print(df['time'].max())
 			if max_date + pd.Timedelta('1 days') >= df['time'].max().normalize():
 				max_date -= pd.Timedelta('3 days')
 			if not df[(df['time'] >= max_date) & (df['tag_prefix'] == tag)].empty:
