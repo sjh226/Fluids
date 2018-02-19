@@ -332,6 +332,54 @@ def oracle_pull():
 
 	return df
 
+def tank_pull():
+	connection = cx_Oracle.connect("REPORTING", "REPORTING", "L48APPSP1.WORLD")
+
+	cursor = connection.cursor()
+	query = '''
+		SELECT
+			TAG_PREFIX,
+			TIME,
+			TNK_1_TOT_LVL * 20, TNK_2_TOT_LVL * 20, TNK_3_TOT_LVL * 20,
+			TNK_4_TOT_LVL * 20, TNK_5_TOT_LVL * 20, TNK_6_TOT_LVL * 20,
+			TNK_7_TOT_LVL * 20, TNK_8_TOT_LVL * 20, TNK_9_TOT_LVL * 20,
+			TNK_10_TOT_LVL * 20, TNK_1_WAT_LVL * 20, TNK_2_WAT_LVL * 20,
+			TNK_3_WAT_LVL * 20, TNK_4_WAT_LVL * 20, TNK_WAT_1_LVL * 20,
+			TNK_WAT_10_LVL * 20, TNK_WAT_11_LVL * 20, TNK_WAT_2_LVL * 20,
+			TNK_WAT_3_LVL * 20, TNK_WAT_305A_LVL * 20, TNK_WAT_305B_LVL * 20,
+			TNK_WAT_305C_LVL * 20, TNK_WAT_305D_LVL * 20, TNK_WAT_305E_LVL * 20,
+			TNK_WAT_310A_LVL * 20, TNK_WAT_310B_LVL * 20, TNK_WAT_310C_LVL * 20,
+			TNK_WAT_310D_LVL * 20, TNK_WAT_4_LVL * 20, TNK_WAT_6_LVL * 20,
+			TNK_WAT_A_LVL * 20, TNK_WAT_B_LVL * 20, TNK_WAT_C_LVL * 20,
+			TNK_WAT_D_LVL * 20, TNK_CND_1_LVL * 20, TNK_CND_2_LVL * 20,
+			TNK_CND_3_LVL * 20, TNK_CND_305A_LVL * 20, TNK_CND_305B_LVL * 20,
+			TNK_CND_305C_LVL * 20, TNK_CND_305D_LVL * 20, TNK_CND_305E_LVL * 20,
+			TNK_CND_305F_LVL * 20, TNK_CND_310A_LVL * 20, TNK_CND_310B_LVL * 20,
+			TNK_CND_310C_LVL * 20, TNK_CND_310D_LVL * 20, TNK_CND_311_LVL * 20,
+			TNK_CND_4_LVL * 20, TNK_CND_5_LVL * 20, TNK_CND_6_LVL * 20,
+			TNK_CND_7_LVL * 20, TNK_CND_8_LVL * 20, TNK_CND_A_LVL * 20,
+			TNK_CND_B_LVL * 20, TNK_CND_C_LVL * 20,
+			GAS_VC
+		FROM DATA_QUALITY.PI_WAM_ALL_WELLS_OPS
+	'''
+
+	cursor.execute(query)
+	results = cursor.fetchall()
+
+	df = pd.DataFrame.from_records(results)
+
+	try:
+		df.columns = pd.DataFrame(np.matrix(cursor.description))[0]
+		df.columns = [col.lower() for col in df.columns]
+	except:
+		df = None
+		print('Dataframe is empty')
+
+	cursor.close()
+	connection.close()
+
+	return df
+
 def ticket_pull():
     try:
         connection = pyodbc.connect(r'Driver={SQL Server Native Client 11.0};'
@@ -542,9 +590,13 @@ def build_loop(df, tic_df):
 			pass
 		elif not ticket.empty:
 			max_date = ticket['date'].max().normalize()
-			if max_date + pd.Timedelta('2 days') >= df['time'].max().normalize():
-				max_date -= pd.Timedelta('3 days')
+			if max_date + pd.Timedelta('2 days') >= df[df['tag_prefix'] == tag]['time'].max().normalize():
+				max_date = df[df['tag_prefix'] == tag]['time'].max().normalize() - pd.Timedelta('3 days')
 			if not df[(df['time'] >= max_date) & (df['tag_prefix'] == tag)].empty:
+				print('--------------------------------')
+				print(df[df['tag_prefix'] == tag]['time'].max())
+				print(max_date)
+				print(tag)
 				rtag_df = rebuild(df[(df['time'] >= max_date + \
 								  pd.Timedelta('1 days')) & \
 							     (df['tag_prefix'] == tag)])
@@ -641,6 +693,10 @@ if __name__ == '__main__':
 	sql_push(build_loop(df, tic_df))
 	t1 = time.time()
 	print('Took {} seconds to run.'.format(t1-t0))
+
+	# df = tank_pull()
+	# df = pd.read_csv('temp_tank.csv')
+	# df = df[df['tag_prefix'] == 'WAM-USANL20-60']
 
 	# o_df = oracle_pull()
 	# df = rate(tank_split(o_df))
