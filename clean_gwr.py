@@ -70,11 +70,20 @@ def oracle_pull():
 					 ELSE 0 END               AS TankCnt,
 					 'TOT'                    AS Tank_Type
 				 FROM DATA_QUALITY.PI_WAM_ALL_WELLS_OPS
-			 --Where TIME >= trunc(sysdate-2)
+			 Where TIME >= ADD_MONTHS(TRUNC(SYSDATE), -12)
 			 ) Vol
-		WHERE Vol.TankVol > 0
-			  --AND TIME >= trunc(sysdate)
-			  --AND rk = 1
+		WHERE (Vol.TankVol > 0 AND TIME >= ADD_MONTHS(TRUNC(SYSDATE), -12))
+		  AND (TAG_PREFIX LIKE 'WAM-CH320C1%'
+		  		OR TAG_PREFIX LIKE 'WAM-CH3201%'
+  				OR TAG_PREFIX LIKE 'WAM-CH452K29_150H%'
+				OR TAG_PREFIX LIKE 'WAM-CH452K29150H%'
+  				OR TAG_PREFIX LIKE 'WAM-CH533B3%'
+				OR TAG_PREFIX LIKE 'WAM-CL29%'
+				OR TAG_PREFIX LIKE 'WAM-HP13_150%'
+				OR TAG_PREFIX LIKE 'WAM-LM8_115H%'
+				OR TAG_PREFIX LIKE 'WAM-ML11_150%'
+				OR TAG_PREFIX LIKE 'WAM-ML11_160%'
+				OR TAG_PREFIX LIKE 'WAM-MON_9%')
 
 		UNION ALL
 
@@ -193,11 +202,20 @@ def oracle_pull():
 					 ELSE 0 END               AS TankCnt,
 					 'WAT'                    AS Tank_Type
 				 FROM DATA_QUALITY.PI_WAM_ALL_WELLS_OPS
-				 --WHERE TIME >= trunc(sysdate - 2)
+				 WHERE TIME >= ADD_MONTHS(TRUNC(SYSDATE), -12)
 			 ) Vol
-		WHERE Vol.TankVol > 0
-			  --AND TIME >= trunc(sysdate)
-			  --AND rk = 1
+		WHERE (Vol.TankVol > 0 AND TIME >= ADD_MONTHS(TRUNC(SYSDATE), -12))
+		  AND (TAG_PREFIX LIKE 'WAM-CH320C1%'
+		  		OR TAG_PREFIX LIKE 'WAM-CH3201%'
+  				OR TAG_PREFIX LIKE 'WAM-CH452K29_150H%'
+				OR TAG_PREFIX LIKE 'WAM-CH452K29150H%'
+  				OR TAG_PREFIX LIKE 'WAM-CH533B3%'
+				OR TAG_PREFIX LIKE 'WAM-CL29%'
+				OR TAG_PREFIX LIKE 'WAM-HP13_150%'
+				OR TAG_PREFIX LIKE 'WAM-LM8_115H%'
+				OR TAG_PREFIX LIKE 'WAM-ML11_150%'
+				OR TAG_PREFIX LIKE 'WAM-ML11_160%'
+				OR TAG_PREFIX LIKE 'WAM-MON_9%')
 
 		UNION ALL
 
@@ -308,11 +326,20 @@ def oracle_pull():
 					 ELSE 0 END               AS TankCnt,
 					 'CND'                    AS Tank_Type
 				 FROM DATA_QUALITY.PI_WAM_ALL_WELLS_OPS
-				  --Where TIME >= trunc(sysdate-2)
+				 Where TIME >= ADD_MONTHS(TRUNC(SYSDATE), -12)
 		) Vol
-		WHERE Vol.TankVol > 0
-			  --AND TIME >= trunc(sysdate)
-			  --AND rk = 1
+		WHERE (Vol.TankVol > 0 AND TIME >= ADD_MONTHS(TRUNC(SYSDATE), -12))
+		  AND (TAG_PREFIX LIKE 'WAM-CH320C1%'
+		  		OR TAG_PREFIX LIKE 'WAM-CH3201%'
+  				OR TAG_PREFIX LIKE 'WAM-CH452K29_150H%'
+				OR TAG_PREFIX LIKE 'WAM-CH452K29150H%'
+  				OR TAG_PREFIX LIKE 'WAM-CH533B3%'
+				OR TAG_PREFIX LIKE 'WAM-CL29%'
+				OR TAG_PREFIX LIKE 'WAM-HP13_150%'
+				OR TAG_PREFIX LIKE 'WAM-LM8_115H%'
+				OR TAG_PREFIX LIKE 'WAM-ML11_150%'
+				OR TAG_PREFIX LIKE 'WAM-ML11_160%'
+				OR TAG_PREFIX LIKE 'WAM-MON_9%')
 	'''
 
 	cursor.execute(query)
@@ -406,7 +433,14 @@ def ticket_pull():
         	ON DT.Facilitykey = DW.Facilitykey
 		  JOIN [EDW].[Enbase].[RunTicket] AS RT
 		    ON RT.tankCode = DT.TankCode
-         WHERE DT.BusinessUnit = 'North';
+         WHERE DT.BusinessUnit = 'North'
+		   AND CAST(RT.runTicketStartDate AS DATE) >= '01-01-2017'
+		   AND DW.API IN ('4903729563', '4903729534', '4903729531',
+		   				  '4903729560', '4903729561', '4903729555',
+						  '4903729556', '4903729582', '4903729584',
+						  '4903729551', '4900724584', '4903729547',
+						  '4903729468', '4903729548', '4903729519',
+						  '4903729514');
     """)
 
     cursor.execute(SQLCommand)
@@ -521,10 +555,13 @@ def rebuild(df):
 		o_lr = o_lr.fit(o_x_poly, o_df['oil'])
 		o_y = o_lr.predict(o_x_poly)
 		o_dev = np.std(abs(o_df['oil'] - o_y))
-		if o_dev != 0:
+		print(o_df.shape)
+		if (o_dev != 0) & \
+		   (o_df[(abs(o_df['oil'] - o_y) <= 1.96 * o_dev)].shape[0] != 0):
 			oil_df = o_df[(abs(o_df['oil'] - o_y) <= 1.96 * o_dev) & \
 						  (o_df['oil'].notnull())][['tag_prefix', 'time', 'oil', 'tankcnt', 'days']]
 		else:
+			print('else')
 			oil_df = o_df[o_df['oil'].notnull()][['tag_prefix', 'time', 'oil', 'tankcnt', 'days']]
 		o_x_poly = o_poly.fit_transform(oil_df['days'].values.reshape(-1, 1))
 		o_lr = o_lr.fit(o_x_poly, oil_df['oil'])
@@ -553,7 +590,8 @@ def rebuild(df):
 		t_lr = t_lr.fit(t_x_poly, t_df['total'])
 		t_y = t_lr.predict(t_x_poly)
 		t_dev = np.std(abs(t_df['total'] - t_y))
-		if t_dev != 0:
+		if (t_dev != 0) & \
+		   (t_df[(abs(t_df['total'] - t_y) <= 1.96 * t_dev)].shape[0] != 0):
 			total_df = t_df[(abs(t_df['total'] - t_y) <= 1.96 * t_dev) & \
 						  (t_df['total'].notnull())][['tag_prefix', 'time', 'total', 'tankcnt', 'days']]
 		else:
@@ -680,12 +718,13 @@ def rate_plot(df):
 
 
 if __name__ == '__main__':
-	# t0 = time.time()
-	# df = rate(tank_split(oracle_pull()))
-	# df.to_csv('temp_gwr.csv')
+	t0 = time.time()
+	o_df = oracle_pull()
+	df = rate(tank_split(oracle_pull()))
+	df.to_csv('temp_gwr.csv')
 	df = pd.read_csv('temp_gwr.csv')
-	# tic_df = ticket_pull()
-	# tic_df.to_csv('temp_ticket.csv')
+	tic_df = ticket_pull()
+	tic_df.to_csv('temp_ticket.csv')
 	tic_df = pd.read_csv('temp_ticket.csv')
 	tic_df['date'] = pd.to_datetime(tic_df['date'])
 	df['time'] = pd.to_datetime(df['time'])
