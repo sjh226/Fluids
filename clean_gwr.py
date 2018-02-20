@@ -467,13 +467,13 @@ def rebuild(df):
 	# Convert DateKey into days since first day
 	df.loc[:,'time'] = pd.to_datetime(df['time'])
 	day_min = df['time'].min()
-	print(day_min)
 	df.loc[:,'days'] = (df['time'] - day_min).dt.total_seconds() / (24 * 60 * 60)
 
 	# Loop through the same model building process for water, oil, and total
 	if not df[df['water'].notnull()].empty:
 		# Remove null values for model building
 		w_df = df[df['water'].notnull()]
+		print(w_df.shape)
 		# Build a linear regression with X-degree polynomial (currently 3 works best)
 		w_lr = LinearRegression()
 		w_poly = PolynomialFeatures(5)
@@ -483,11 +483,18 @@ def rebuild(df):
 		# Calculate standard deviation and remove values outside of a 95% CI
 		# Catch for if STD is 0 (straight line in data)
 		w_dev = np.std(abs(w_df['water'] - w_y))
+		print(w_dev)
 		if w_dev != 0:
+			if w_df[(abs(w_df['water'] - w_y) <= 1.96 * w_dev)].shape[0] == 0:
+				print(w_df.head())
+				print(w_y)
 			water_df = w_df[(abs(w_df['water'] - w_y) <= 1.96 * w_dev) & \
 						  (w_df['water'].notnull())][['tag_prefix', 'time', 'water', 'tankcnt', 'days']]
 		else:
+			print('else block')
 			water_df = w_df[w_df['water'].notnull()][['tag_prefix', 'time', 'water', 'tankcnt', 'days']]
+		print(w_df.shape)
+		print(water_df.shape)
 		# Refit regression on cleaned data
 		w_x_poly = w_poly.fit_transform(water_df['days'].values.reshape(-1, 1))
 		w_lr = w_lr.fit(w_x_poly, water_df['water'])
@@ -594,8 +601,6 @@ def build_loop(df, tic_df):
 				max_date = df[df['tag_prefix'] == tag]['time'].max().normalize() - pd.Timedelta('3 days')
 			if not df[(df['time'] >= max_date) & (df['tag_prefix'] == tag)].empty:
 				print('--------------------------------')
-				print(df[df['tag_prefix'] == tag]['time'].max())
-				print(max_date)
 				print(tag)
 				rtag_df = rebuild(df[(df['time'] >= max_date + \
 								  pd.Timedelta('1 days')) & \
