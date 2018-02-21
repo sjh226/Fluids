@@ -73,17 +73,16 @@ def oracle_pull():
 			 Where TIME >= ADD_MONTHS(TRUNC(SYSDATE), -12)
 			 ) Vol
 		WHERE (Vol.TankVol > 0 AND TIME >= ADD_MONTHS(TRUNC(SYSDATE), -12))
-		  AND (TAG_PREFIX LIKE 'WAM-CH320C1%'
-		  		OR TAG_PREFIX LIKE 'WAM-CH3201%'
-  				OR TAG_PREFIX LIKE 'WAM-CH452K29_150H%'
+		  AND (TAG_PREFIX LIKE 'WAM-CH320C1-160H%'
 				OR TAG_PREFIX LIKE 'WAM-CH452K29150H%'
-  				OR TAG_PREFIX LIKE 'WAM-CH533B3%'
-				OR TAG_PREFIX LIKE 'WAM-CL29%'
+				  OR TAG_PREFIX LIKE 'WAM-CH533B3_80D%'
+				OR TAG_PREFIX LIKE 'WAM-CL29_150H%'
+				OR TAG_PREFIX LIKE 'WAM-CL29_160H%'
 				OR TAG_PREFIX LIKE 'WAM-HP13_150%'
 				OR TAG_PREFIX LIKE 'WAM-LM8_115H%'
-				OR TAG_PREFIX LIKE 'WAM-ML11_150%'
-				OR TAG_PREFIX LIKE 'WAM-ML11_160%'
-				OR TAG_PREFIX LIKE 'WAM-MON_9%')
+				OR TAG_PREFIX LIKE 'WAM-ML11_150H%'
+				OR TAG_PREFIX LIKE 'WAM-ML11_160H%'
+				OR TAG_PREFIX LIKE 'WAM-MN9_150D%')
 
 		UNION ALL
 
@@ -205,17 +204,16 @@ def oracle_pull():
 				 WHERE TIME >= ADD_MONTHS(TRUNC(SYSDATE), -12)
 			 ) Vol
 		WHERE (Vol.TankVol > 0 AND TIME >= ADD_MONTHS(TRUNC(SYSDATE), -12))
-		  AND (TAG_PREFIX LIKE 'WAM-CH320C1%'
-		  		OR TAG_PREFIX LIKE 'WAM-CH3201%'
-  				OR TAG_PREFIX LIKE 'WAM-CH452K29_150H%'
+		  AND (TAG_PREFIX LIKE 'WAM-CH320C1-160H%'
 				OR TAG_PREFIX LIKE 'WAM-CH452K29150H%'
-  				OR TAG_PREFIX LIKE 'WAM-CH533B3%'
-				OR TAG_PREFIX LIKE 'WAM-CL29%'
+				  OR TAG_PREFIX LIKE 'WAM-CH533B3_80D%'
+				OR TAG_PREFIX LIKE 'WAM-CL29_150H%'
+				OR TAG_PREFIX LIKE 'WAM-CL29_160H%'
 				OR TAG_PREFIX LIKE 'WAM-HP13_150%'
 				OR TAG_PREFIX LIKE 'WAM-LM8_115H%'
-				OR TAG_PREFIX LIKE 'WAM-ML11_150%'
-				OR TAG_PREFIX LIKE 'WAM-ML11_160%'
-				OR TAG_PREFIX LIKE 'WAM-MON_9%')
+				OR TAG_PREFIX LIKE 'WAM-ML11_150H%'
+				OR TAG_PREFIX LIKE 'WAM-ML11_160H%'
+				OR TAG_PREFIX LIKE 'WAM-MN9_150D%')
 
 		UNION ALL
 
@@ -328,18 +326,17 @@ def oracle_pull():
 				 FROM DATA_QUALITY.PI_WAM_ALL_WELLS_OPS
 				 Where TIME >= ADD_MONTHS(TRUNC(SYSDATE), -12)
 		) Vol
-		WHERE (Vol.TankVol > 0 AND TIME >= ADD_MONTHS(TRUNC(SYSDATE), -12))
-		  AND (TAG_PREFIX LIKE 'WAM-CH320C1%'
-		  		OR TAG_PREFIX LIKE 'WAM-CH3201%'
-  				OR TAG_PREFIX LIKE 'WAM-CH452K29_150H%'
+		WHERE (Vol.TankVol > 0)
+		  AND (TAG_PREFIX LIKE 'WAM-CH320C1-160H%'
 				OR TAG_PREFIX LIKE 'WAM-CH452K29150H%'
-  				OR TAG_PREFIX LIKE 'WAM-CH533B3%'
-				OR TAG_PREFIX LIKE 'WAM-CL29%'
+				  OR TAG_PREFIX LIKE 'WAM-CH533B3_80D%'
+				OR TAG_PREFIX LIKE 'WAM-CL29_150H%'
+				OR TAG_PREFIX LIKE 'WAM-CL29_160H%'
 				OR TAG_PREFIX LIKE 'WAM-HP13_150%'
 				OR TAG_PREFIX LIKE 'WAM-LM8_115H%'
-				OR TAG_PREFIX LIKE 'WAM-ML11_150%'
-				OR TAG_PREFIX LIKE 'WAM-ML11_160%'
-				OR TAG_PREFIX LIKE 'WAM-MON_9%')
+				OR TAG_PREFIX LIKE 'WAM-ML11_150H%'
+				OR TAG_PREFIX LIKE 'WAM-ML11_160H%'
+				OR TAG_PREFIX LIKE 'WAM-MN9_150D%')
 	'''
 
 	cursor.execute(query)
@@ -359,36 +356,28 @@ def oracle_pull():
 
 	return df
 
-def tank_pull():
+def well_pull():
 	connection = cx_Oracle.connect("REPORTING", "REPORTING", "L48APPSP1.WORLD")
 
 	cursor = connection.cursor()
-	query = '''
-		SELECT
-			TAG_PREFIX,
-			TIME,
-			TNK_1_TOT_LVL * 20, TNK_2_TOT_LVL * 20, TNK_3_TOT_LVL * 20,
-			TNK_4_TOT_LVL * 20, TNK_5_TOT_LVL * 20, TNK_6_TOT_LVL * 20,
-			TNK_7_TOT_LVL * 20, TNK_8_TOT_LVL * 20, TNK_9_TOT_LVL * 20,
-			TNK_10_TOT_LVL * 20, TNK_1_WAT_LVL * 20, TNK_2_WAT_LVL * 20,
-			TNK_3_WAT_LVL * 20, TNK_4_WAT_LVL * 20, TNK_WAT_1_LVL * 20,
-			TNK_WAT_10_LVL * 20, TNK_WAT_11_LVL * 20, TNK_WAT_2_LVL * 20,
-			TNK_WAT_3_LVL * 20, TNK_WAT_305A_LVL * 20, TNK_WAT_305B_LVL * 20,
-			TNK_WAT_305C_LVL * 20, TNK_WAT_305D_LVL * 20, TNK_WAT_305E_LVL * 20,
-			TNK_WAT_310A_LVL * 20, TNK_WAT_310B_LVL * 20, TNK_WAT_310C_LVL * 20,
-			TNK_WAT_310D_LVL * 20, TNK_WAT_4_LVL * 20, TNK_WAT_6_LVL * 20,
-			TNK_WAT_A_LVL * 20, TNK_WAT_B_LVL * 20, TNK_WAT_C_LVL * 20,
-			TNK_WAT_D_LVL * 20, TNK_CND_1_LVL * 20, TNK_CND_2_LVL * 20,
-			TNK_CND_3_LVL * 20, TNK_CND_305A_LVL * 20, TNK_CND_305B_LVL * 20,
-			TNK_CND_305C_LVL * 20, TNK_CND_305D_LVL * 20, TNK_CND_305E_LVL * 20,
-			TNK_CND_305F_LVL * 20, TNK_CND_310A_LVL * 20, TNK_CND_310B_LVL * 20,
-			TNK_CND_310C_LVL * 20, TNK_CND_310D_LVL * 20, TNK_CND_311_LVL * 20,
-			TNK_CND_4_LVL * 20, TNK_CND_5_LVL * 20, TNK_CND_6_LVL * 20,
-			TNK_CND_7_LVL * 20, TNK_CND_8_LVL * 20, TNK_CND_A_LVL * 20,
-			TNK_CND_B_LVL * 20, TNK_CND_C_LVL * 20,
-			GAS_VC
+	query = ("""
+		SELECT  TAG_PREFIX
+				,TIME AS flow_date
+				,CTS_VC AS volume
 		FROM DATA_QUALITY.PI_WAM_ALL_WELLS_OPS
-	'''
+		WHERE (CTS_VC IS NOT NULL)
+		  AND (TAG_PREFIX LIKE 'WAM-CH320C1-160H%'
+			OR TAG_PREFIX LIKE 'WAM-CH452K29150H%'
+			OR TAG_PREFIX LIKE 'WAM-CH533B3_80D%'
+			OR TAG_PREFIX LIKE 'WAM-CL29_150H%'
+			OR TAG_PREFIX LIKE 'WAM-CL29_160H%'
+			OR TAG_PREFIX LIKE 'WAM-HP13_150%'
+			OR TAG_PREFIX LIKE 'WAM-LM8_115H%'
+			OR TAG_PREFIX LIKE 'WAM-ML11_150H%'
+			OR TAG_PREFIX LIKE 'WAM-ML11_160H%'
+			OR TAG_PREFIX LIKE 'WAM-MN9_150D%')
+		ORDER BY TAG_PREFIX, TIME
+	""")
 
 	cursor.execute(query)
 	results = cursor.fetchall()
@@ -408,56 +397,56 @@ def tank_pull():
 	return df
 
 def ticket_pull():
-    try:
-        connection = pyodbc.connect(r'Driver={SQL Server Native Client 11.0};'
-                                    r'Server=SQLDW-L48.BP.Com;'
-                                    r'Database=OperationsDataMart;'
-                                    r'trusted_connection=yes'
-                                    )
-    except pyodbc.Error:
-    	print("Connection Error")
-    	sys.exit()
+	try:
+		connection = pyodbc.connect(r'Driver={SQL Server Native Client 11.0};'
+									r'Server=SQLDW-L48.BP.Com;'
+									r'Database=OperationsDataMart;'
+									r'trusted_connection=yes'
+									)
+	except pyodbc.Error:
+		print("Connection Error")
+		sys.exit()
 
-    cursor = connection.cursor()
-    SQLCommand = ("""
-        SELECT CAST(RT.runTicketStartDate AS DATE) AS date
+	cursor = connection.cursor()
+	SQLCommand = ("""
+		SELECT RT.runTicketStartDate AS date
 			  ,PTD.TAG
-              ,RT.ticketType
-              ,RT.tankCode
-        	  ,DT.Facilitykey
-              ,RT.grossVolume
-	      FROM [TeamOptimizationEngineering].[Reporting].[PITag_Dict] AS PTD
+			  ,RT.ticketType
+			  ,RT.tankCode
+			  ,DT.Facilitykey
+			  ,RT.grossVolume
+		  FROM [TeamOptimizationEngineering].[Reporting].[PITag_Dict] AS PTD
 		  JOIN [TeamOptimizationEngineering].[dbo].[DimensionsWells] AS DW
-		  	ON DW.API = PTD.API
-          JOIN [TeamOptimizationEngineering].[dbo].[DimensionsTanks] AS DT
-        	ON DT.Facilitykey = DW.Facilitykey
+			  ON DW.API = PTD.API
+		  JOIN [TeamOptimizationEngineering].[dbo].[DimensionsTanks] AS DT
+			ON DT.Facilitykey = DW.Facilitykey
 		  JOIN [EDW].[Enbase].[RunTicket] AS RT
-		    ON RT.tankCode = DT.TankCode
-         WHERE DT.BusinessUnit = 'North'
+			ON RT.tankCode = DT.TankCode
+		 WHERE DT.BusinessUnit = 'North'
 		   AND CAST(RT.runTicketStartDate AS DATE) >= '01-01-2017'
 		   AND DW.API IN ('4903729563', '4903729534', '4903729531',
-		   				  '4903729560', '4903729561', '4903729555',
+							 '4903729560', '4903729561', '4903729555',
 						  '4903729556', '4903729582', '4903729584',
 						  '4903729551', '4900724584', '4903729547',
 						  '4903729468', '4903729548', '4903729519',
 						  '4903729514');
-    """)
+	""")
 
-    cursor.execute(SQLCommand)
-    results = cursor.fetchall()
+	cursor.execute(SQLCommand)
+	results = cursor.fetchall()
 
-    df = pd.DataFrame.from_records(results)
-    connection.close()
+	df = pd.DataFrame.from_records(results)
+	connection.close()
 
-    try:
-    	df.columns = pd.DataFrame(np.matrix(cursor.description))[0]
-    except:
-    	df = None
-    	print('Dataframe is empty')
+	try:
+		df.columns = pd.DataFrame(np.matrix(cursor.description))[0]
+	except:
+		df = None
+		print('Dataframe is empty')
 
-    df['date'] = pd.to_datetime(df['date'])
+	df['date'] = pd.to_datetime(df['date'])
 
-    return df.drop_duplicates()
+	return df.drop_duplicates()
 
 def tank_split(df):
 	water_df = df[df['tank_type'] == 'WAT'][['tag_prefix', 'time', 'tankvol', 'tankcnt']]
@@ -496,12 +485,13 @@ def rate(df):
 def rebuild(df):
 	return_df = pd.DataFrame(columns=['TAG_PREFIX', 'DateKey', 'TANK_TYPE', \
 									  'TANKLVL', 'predict', 'rate', \
-									  'TANKCNT', 'CalcDate'])
+									  'TANKCNT', 'CalcDate', 'Volume'])
 
 	# Convert DateKey into days since first day
 	df.loc[:,'time'] = pd.to_datetime(df['time'])
 	day_min = df['time'].min()
 	df.loc[:,'days'] = (df['time'] - day_min).dt.total_seconds() / (24 * 60 * 60)
+	# print(df[df['volume'].notnull()].shape)
 
 	# Loop through the same model building process for water, oil, and total
 	if not df[df['water'].notnull()].empty:
@@ -521,7 +511,6 @@ def rebuild(df):
 			water_df = w_df[(abs(w_df['water'] - w_y) <= 1.96 * w_dev) & \
 						  (w_df['water'].notnull())][['tag_prefix', 'time', 'water', 'tankcnt', 'days']]
 		else:
-			print('else block')
 			water_df = w_df[w_df['water'].notnull()][['tag_prefix', 'time', 'water', 'tankcnt', 'days']]
 		# Refit regression on cleaned data
 		w_x_poly = w_poly.fit_transform(water_df['days'].values.reshape(-1, 1))
@@ -532,7 +521,7 @@ def rebuild(df):
 		water_df = w_df[['tag_prefix', 'time', 'water', 'tankcnt']]
 		water_df.loc[:,'predict'] = w_y
 		# Calculate rates from predicted values
-		water_df.loc[:,'rate'] = (water_df['predict'] - water_df['predict'].shift(1)) / \
+		water_df.loc[:,'rate'] = (water_df['water'] - water_df['water'].shift(1)) / \
 								 ((water_df['time'] - water_df['time'].shift(1)) / \
 								 np.timedelta64(1, 'h'))
 		# Forward fill any negative rate
@@ -555,26 +544,42 @@ def rebuild(df):
 		o_lr = o_lr.fit(o_x_poly, o_df['oil'])
 		o_y = o_lr.predict(o_x_poly)
 		o_dev = np.std(abs(o_df['oil'] - o_y))
-		print(o_df.shape)
 		if (o_dev != 0) & \
 		   (o_df[(abs(o_df['oil'] - o_y) <= 1.96 * o_dev)].shape[0] != 0):
 			oil_df = o_df[(abs(o_df['oil'] - o_y) <= 1.96 * o_dev) & \
-						  (o_df['oil'].notnull())][['tag_prefix', 'time', 'oil', 'tankcnt', 'days']]
+						  (o_df['oil'].notnull())][['tag_prefix', 'time', 'oil', 'tankcnt', 'days', 'volume']]
 		else:
-			print('else')
-			oil_df = o_df[o_df['oil'].notnull()][['tag_prefix', 'time', 'oil', 'tankcnt', 'days']]
+			oil_df = o_df[o_df['oil'].notnull()][['tag_prefix', 'time', 'oil', 'tankcnt', 'days', 'volume']]
+		# print(oil_df['volume'])
 		o_x_poly = o_poly.fit_transform(oil_df['days'].values.reshape(-1, 1))
 		o_lr = o_lr.fit(o_x_poly, oil_df['oil'])
 		o_pred_poly = o_poly.fit_transform(o_df['days'].values.reshape(-1, 1))
 		o_y = o_lr.predict(o_pred_poly)
-		oil_df = o_df[['tag_prefix', 'time', 'oil', 'tankcnt']]
+		oil_df = o_df[['tag_prefix', 'time', 'days', 'oil', 'tankcnt']]
 		oil_df.loc[:,'predict'] = o_y
-		oil_df.loc[:,'rate'] = (oil_df['predict'] - oil_df['predict'].shift(1)) / \
+		oil_df.loc[:,'rate'] = (oil_df['oil'] - oil_df['oil'].shift(1)) / \
 							   ((oil_df['time'] - oil_df['time'].shift(1)) / \
 							   np.timedelta64(1, 'h'))
 		oil_df.loc[oil_df['rate'] < 0, 'rate'] = np.nan
 		oil_df['rate'].fillna(method='ffill', inplace=True)
 		oil_df['rate'].fillna(method='bfill', inplace=True)
+
+
+
+		rate_o_lr = LinearRegression()
+		rate_o_lr = rate_o_lr.fit(oil_df['days'].reshape(-1, 1), oil_df['rate'])
+		rate_o_y = rate_o_lr.predict(oil_df['days'].reshape(-1, 1))
+		rate_o_dev = np.std(abs(oil_df['rate'] - rate_o_y))
+		if (rate_o_dev != 0) & \
+		   (o_df[(abs(oil_df['rate'] - rate_o_y) <= 1.96 * rate_o_dev)].shape[0] != 0):
+			oil_df.loc[abs(oil_df['rate'] - rate_o_y) <= 1.96 * rate_o_dev, :] = np.nan
+			oil_df['rate'].fillna(method='ffill', inplace=True)
+			oil_df['rate'].fillna(method='bfill', inplace=True)
+
+			# oil_df = rate_o_df[(abs(oil_df['oil'] - rate_o_y) <= 1.96 * rate_o_dev) & \
+			# 			  (oil_df['oil'].notnull())][['tag_prefix', 'time', 'oil', 'tankcnt', 'days', 'volume']]
+
+
 		oil_df.loc[:,'TANK_TYPE'] = np.full(oil_df.shape[0], 'CND')
 		oil_df.rename(index=str, columns={'tag_prefix':'TAG_PREFIX', 'time':'DateKey', \
 										  'oil':'TANKLVL', 'tankcnt':'TANKCNT'}, \
@@ -593,21 +598,27 @@ def rebuild(df):
 		if (t_dev != 0) & \
 		   (t_df[(abs(t_df['total'] - t_y) <= 1.96 * t_dev)].shape[0] != 0):
 			total_df = t_df[(abs(t_df['total'] - t_y) <= 1.96 * t_dev) & \
-						  (t_df['total'].notnull())][['tag_prefix', 'time', 'total', 'tankcnt', 'days']]
+						  (t_df['total'].notnull())][['tag_prefix', 'time', 'total', 'tankcnt', 'days', 'volume']]
 		else:
-			total_df = t_df[t_df['total'].notnull()][['tag_prefix', 'time', 'total', 'tankcnt', 'days']]
+			total_df = t_df[t_df['total'].notnull()][['tag_prefix', 'time', 'total', 'tankcnt', 'days', 'volume']]
 		t_x_poly = t_poly.fit_transform(total_df['days'].values.reshape(-1, 1))
 		t_lr = t_lr.fit(t_x_poly, total_df['total'])
 		t_pred_poly = t_poly.fit_transform(t_df['days'].values.reshape(-1, 1))
 		t_y = t_lr.predict(t_pred_poly)
 		total_df = t_df[['tag_prefix', 'time', 'total', 'tankcnt']]
 		total_df.loc[:,'predict'] = t_y
-		total_df.loc[:,'rate'] = (total_df['predict'] - total_df['predict'].shift(1)) / \
+		total_df.loc[:,'rate'] = (total_df['total'] - total_df['total'].shift(1)) / \
 								 ((total_df['time'] - total_df['time'].shift(1)) / \
 								 np.timedelta64(1, 'h'))
 		total_df.loc[total_df['rate'] < 0, 'rate'] = np.nan
 		total_df['rate'].fillna(method='ffill', inplace=True)
 		total_df['rate'].fillna(method='bfill', inplace=True)
+		# total_df.loc[:,'clean_rate'] = (total_df['total'] - total_df['total'].shift(1)) / \
+		# 							   ((total_df['time'] - total_df['time'].shift(1)) / \
+		# 							   np.timedelta64(1, 'h'))
+		# total_df.loc[total_df['clean_rate'] < 0, 'clean_rate'] = np.nan
+		# total_df['clean_rate'].fillna(method='ffill', inplace=True)
+		# total_df['clean_rate'].fillna(method='bfill', inplace=True)
 		total_df.loc[:,'TANK_TYPE'] = np.full(total_df.shape[0], 'TOT')
 		total_df.rename(index=str, columns={'tag_prefix':'TAG_PREFIX', 'time':'DateKey', \
 											'total':'TANKLVL', 'tankcnt':'TANKCNT'}, \
@@ -616,30 +627,32 @@ def rebuild(df):
 		return_df = return_df.append(total_df)
 
 	return_df = return_df[['TAG_PREFIX', 'DateKey', 'TANK_TYPE', 'TANKLVL', \
-						   'predict', 'rate', 'TANKCNT', 'CalcDate']]
+						   'predict', 'rate', 'TANKCNT', 'CalcDate', 'Volume']]
 
 	return return_df.sort_values(['TAG_PREFIX', 'DateKey'])
 
 def build_loop(df, tic_df):
 	r_df = pd.DataFrame(columns=['TAG_PREFIX', 'DateKey', 'TANK_TYPE', \
-									  'TANKLVL', 'TANKCNT', 'CalcDate'])
+								 'TANKLVL', 'TANKCNT', 'CalcDate', 'Volume'])
+	print('--------------------------------')
 	for tag in df['tag_prefix'].unique():
 		ticket = tic_df[(tic_df['ticketType'] != 'Disposition') & (tic_df['TAG'] == tag)]
 		if df[(df['tag_prefix'] == tag) & (df['oil'].notnull())].shape[0] == 0:
 			pass
 		elif not ticket.empty:
-			max_date = ticket['date'].max().normalize()
-			if max_date + pd.Timedelta('2 days') >= df[df['tag_prefix'] == tag]['time'].max().normalize():
-				max_date = df[df['tag_prefix'] == tag]['time'].max().normalize() - pd.Timedelta('3 days')
-			if not df[(df['time'] >= max_date) & (df['tag_prefix'] == tag)].empty:
-				print('--------------------------------')
-				print(tag)
-				rtag_df = rebuild(df[(df['time'] >= max_date + \
-								  pd.Timedelta('1 days')) & \
-							     (df['tag_prefix'] == tag)])
-				r_df = r_df.append(rtag_df)
-			else:
-				pass
+			max_date = ticket['date'].max()
+			print(max_date)
+			# if max_date + pd.Timedelta('2 days') >= df[df['tag_prefix'] == tag]['time'].max().normalize():
+			# 	max_date = df[df['tag_prefix'] == tag]['time'].max().normalize() - pd.Timedelta('3 days')
+			# if not df[(df['time'] >= max_date) & (df['tag_prefix'] == tag)].empty:
+			print(tag)
+				# print(df[df['volume'].notnull()]['tag_prefix'].unique())
+			rtag_df = rebuild(df[(df['time'] >= max_date + \
+							  pd.Timedelta('1 hours')) & \
+							 (df['tag_prefix'] == tag)])
+			r_df = r_df.append(rtag_df)
+			# else:
+			# 	pass
 		else:
 			rtag_df = rebuild(df[df['tag_prefix'] == tag])
 			r_df = r_df.append(rtag_df)
@@ -719,8 +732,14 @@ def rate_plot(df):
 
 if __name__ == '__main__':
 	t0 = time.time()
-	o_df = oracle_pull()
 	df = rate(tank_split(oracle_pull()))
+	df['time'] = pd.to_datetime(df['time'])
+	turb_df = well_pull()
+	# print(turb_df[turb_df['volume'].notnull()]['tag_prefix'].unique())
+	# print(df[df['volume'].notnu
+	df = pd.merge(df, turb_df, how='left', left_on=['tag_prefix', 'time'], \
+											  right_on=['tag_prefix', 'flow_date'])
+	# print(mdf[mdf['volume'].notnull()]['tag_prefix'].unique())
 	df.to_csv('temp_gwr.csv')
 	df = pd.read_csv('temp_gwr.csv')
 	tic_df = ticket_pull()
@@ -728,7 +747,8 @@ if __name__ == '__main__':
 	tic_df = pd.read_csv('temp_ticket.csv')
 	tic_df['date'] = pd.to_datetime(tic_df['date'])
 	df['time'] = pd.to_datetime(df['time'])
-	sql_push(build_loop(df, tic_df))
+	this = build_loop(df, tic_df)
+	sql_push(this)
 	t1 = time.time()
 	print('Took {} seconds to run.'.format(t1-t0))
 
