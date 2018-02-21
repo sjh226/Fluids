@@ -571,8 +571,8 @@ def rebuild(df):
 		rate_o_y = rate_o_lr.predict(oil_df['days'].reshape(-1, 1))
 		rate_o_dev = np.std(abs(oil_df['rate'] - rate_o_y))
 		if (rate_o_dev != 0) & \
-		   (oil_df[(abs(oil_df['rate'] - rate_o_y) <= 1.96 * rate_o_dev)].shape[0] != 0):
-			oil_df.loc[(oil_df['rate'] - rate_o_y) >= 1.96 * rate_o_dev, :] = np.nan
+		   (o_df[(abs(oil_df['rate'] - rate_o_y) <= 1.96 * rate_o_dev)].shape[0] != 0):
+			oil_df.loc[abs(oil_df['rate'] - rate_o_y) <= 1.96 * rate_o_dev, :] = np.nan
 			oil_df['rate'].fillna(method='ffill', inplace=True)
 			oil_df['rate'].fillna(method='bfill', inplace=True)
 
