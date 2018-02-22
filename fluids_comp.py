@@ -25,6 +25,7 @@ def lgr_pull():
                 ,LGR.FacilityCapacity
                 ,LGR.CalcDate
                 ,LGR.PredictionMethod
+                ,LGR.TankCount
         FROM [TeamOptimizationEngineering].[dbo].[Inventory] AS LGR
         JOIN (SELECT	FacilityKey
         				,MAX(CalcDate) maxtime
@@ -36,7 +37,8 @@ def lgr_pull():
         	ON LGR.FacilityKey = DW.FacilityKey
         --WHERE LGR.BusinessUnit = 'North'
             --AND LGR.PredictionMethod = 'LGRv4'
-        GROUP BY LGR.FacilityKey, LGR.FacilityName, LGR.FacilityCapacity, LGR.CalcDate, LGR.PredictionMethod;
+        GROUP BY LGR.FacilityKey, LGR.FacilityName, LGR.FacilityCapacity,
+                 LGR.CalcDate, LGR.PredictionMethod, LGR.TankCount;
     """)
 
     cursor.execute(SQLCommand)
@@ -415,7 +417,7 @@ def lgr_over(df):
 
 def match_gauge(lgr, gauge):
     lgr['Date'] = pd.to_datetime(lgr['CalcDate']) + pd.Timedelta('1 days')
-    lgr = lgr[['FacilityKey', 'FacilityName', 'Date', 'LGROil', 'LGRWater', 'PredictionMethod']]
+    lgr = lgr[['FacilityKey', 'FacilityName', 'Date', 'LGROil', 'LGRWater', 'PredictionMethod', 'TankCount']]
     gauge['Date'] = gauge['gaugeDate']
     gauge['FacilityKey'] = gauge['Facilitykey']
     gauge = gauge[['FacilityKey', 'Date', 'total_oil', 'total_water']]
@@ -505,7 +507,7 @@ if __name__ == '__main__':
 
     # off_df = spill_gauge(df_spill, gauge_df)
 
-    df = match_gauge(df_lgr, gauge_df[gauge_df['total_oil'] >= 50])
+    df = match_gauge(df_lgr, gauge_df[gauge_df['total_oil'] >= 140])
     # off_df = facility_error(df)
     # off_df.to_csv('data/temp_lgr_error.csv')
     # off_df = pd.read_csv('data/temp_lgr_error.csv')
