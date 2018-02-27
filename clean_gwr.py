@@ -484,7 +484,7 @@ def rate(df):
 
 def rebuild(df):
 	return_df = pd.DataFrame(columns=['TAG_PREFIX', 'DateKey', 'TANK_TYPE', \
-									  'TANKLVL', 'predict', 'rate', \
+									  'TANKLVL', 'predict', 'rate2', \
 									  'TANKCNT', 'CalcDate', 'Volume'])
 
 	# Convert DateKey into days since first day
@@ -494,166 +494,59 @@ def rebuild(df):
 	# print(df[df['volume'].notnull()].shape)
 
 	# Loop through the same model building process for water, oil, and total
-	if not df[df['water'].notnull()].empty:
-		# Remove null values for model building
-		w_df = df[df['water'].notnull()]
-		# Build a linear regression with X-degree polynomial (currently 3 works best)
-		w_lr = LinearRegression()
-		w_poly = PolynomialFeatures(5)
-		w_x_poly = w_poly.fit_transform(w_df['days'].values.reshape(-1, 1))
-		w_lr = w_lr.fit(w_x_poly, w_df['water'])
-		w_y = w_lr.predict(w_x_poly)
-		# Calculate standard deviation and remove values outside of a 95% CI
-		# Catch for if STD is 0 (straight line in data)
-		w_dev = np.std(abs(w_df['water'] - w_y))
-		if (w_dev != 0) & \
-		   (w_df[(abs(w_df['water'] - w_y) <= 1.96 * w_dev)].shape[0] != 0):
-			water_df = w_df[(abs(w_df['water'] - w_y) <= 1.96 * w_dev) & \
-						  (w_df['water'].notnull())][['tag_prefix', 'time', 'water', 'tankcnt', 'days']]
-		else:
-			water_df = w_df[w_df['water'].notnull()][['tag_prefix', 'time', 'water', 'tankcnt', 'days']]
-		# Refit regression on cleaned data
-		w_x_poly = w_poly.fit_transform(water_df['days'].values.reshape(-1, 1))
-		w_lr = w_lr.fit(w_x_poly, water_df['water'])
-		w_pred_poly = w_poly.fit_transform(w_df['days'].values.reshape(-1, 1))
-		# Predict for each time available and add predictions to output
-		w_y = w_lr.predict(w_pred_poly)
-		water_df = w_df[['tag_prefix', 'time', 'water', 'tankcnt']]
-		water_df.loc[:,'predict'] = w_y
-		# Calculate rates from predicted values
-		water_df.loc[:,'rate'] = (water_df['water'] - water_df['water'].shift(1)) / \
-								 ((water_df['time'] - water_df['time'].shift(1)) / \
-								 np.timedelta64(1, 'h'))
-		# Forward fill any negative rate
-		water_df.loc[water_df['rate'] < 0, 'rate'] = np.nan
-		water_df['rate'].fillna(method='ffill', inplace=True)
-		water_df['rate'].fillna(method='bfill', inplace=True)
-		water_df.loc[:,'TANK_TYPE'] = np.full(water_df.shape[0], 'WAT')
-		# Format columns to match that in SQL Server
-		water_df.rename(index=str, columns={'tag_prefix':'TAG_PREFIX', 'time':'DateKey', \
-											'water':'TANKLVL', 'tankcnt':'TANKCNT'}, \
-											inplace=True)
-		water_df.loc[:,'CalcDate'] = water_df['DateKey']
-		return_df = return_df.append(water_df)
+	for tank_type in ['oil', 'water', 'total']:
+		if not df[df[tank_type].notnull()].empty:
+			o_df = df[df[tank_type].notnull()]
+			o_lr = LinearRegression()
+			o_poly = PolynomialFeatures(5)
+			o_x_poly = o_poly.fit_transform(o_df['days'].values.reshape(-1, 1))
+			o_lr = o_lr.fit(o_x_poly, o_df[tank_type])
+			o_y = o_lr.predict(o_x_poly)
+			o_dev = np.std(abs(o_df[tank_type] - o_y))
+			if (o_dev != 0) & (o_df[(abs(o_df[tank_type] - o_y) <= 1.96 * o_dev)].shape[0] != 0):
+				value_limited_df = o_df[(abs(o_df[tank_type] - o_y) <= 1.96 * o_dev) & (o_df[tank_type].notnull())][['tag_prefix', 'time', tank_type, 'tankcnt', 'days', 'volume']]
+			else:
+				value_limited_df = o_df[['tag_prefix', 'time', tank_type, 'tankcnt', 'days', 'volume']]
 
-	if not df[df['oil'].notnull()].empty:
-		o_df = df[df['oil'].notnull()]
-		o_lr = LinearRegression()
-		o_poly = PolynomialFeatures(5)
-		o_x_poly = o_poly.fit_transform(o_df['days'].values.reshape(-1, 1))
-		o_lr = o_lr.fit(o_x_poly, o_df['oil'])
-		o_y = o_lr.predict(o_x_poly)
-		o_dev = np.std(abs(o_df['oil'] - o_y))
-		if (o_dev != 0) & (o_df[(abs(o_df['oil'] - o_y) <= 1.96 * o_dev)].shape[0] != 0):
-			value_limited_df = o_df[(abs(o_df['oil'] - o_y) <= 1.96 * o_dev) & (o_df['oil'].notnull())][['tag_prefix', 'time', 'oil', 'tankcnt', 'days', 'volume']]
-		else:
-			value_limited_df = o_df[['tag_prefix', 'time', 'oil', 'tankcnt', 'days', 'volume']]
-		print(df.shape)
-		print(o_df.shape)
-		print(value_limited_df.shape)
-		# print(oil_df['volume'])
-		# o_x_poly = o_poly.fit_transform(value_limited_df['days'].values.reshape(-1, 1))
-		# o_lr = o_lr.fit(o_x_poly, value_limited_df['oil'])
-		# o_pred_poly = o_poly.fit_transform(o_df['days'].values.reshape(-1, 1))
-		# o_y = o_lr.predict(o_pred_poly)
-		# oil_df = o_df[['tag_prefix', 'time', 'days', 'oil', 'tankcnt']]
-		# oil_df.loc[:,'predict'] = o_y
-		# print(oil_df['oil'] - oil_df['oil'].shift(1))
-		# print((oil_df['time'] - oil_df['time'].shift(1)) / \
-		# np.timedelta64(1, 'h'))
-		value_limited_df.loc[:,'rate'] = \
-				(value_limited_df['oil'] - \
-					value_limited_df['oil'].shift(1)) / \
-				((value_limited_df['time'] - \
-					value_limited_df['time'].shift(1)) / \
-					np.timedelta64(1, 'h'))
-		print(value_limited_df[['time', 'oil', 'rate']])
+			value_limited_df.loc[:,'rate'] = \
+					(value_limited_df[tank_type] - \
+						value_limited_df[tank_type].shift(1)) / \
+					((value_limited_df['time'] - \
+						value_limited_df['time'].shift(1)) / \
+						np.timedelta64(1, 'h'))
 
-		# value_limited_df.loc[value_limited_df['rate'] < 0, 'rate'] = np.nan
-		# value_limited_df['rate'].fillna(method='ffill', inplace=True)
-		# value_limited_df['rate'].fillna(method='bfill', inplace=True)
+			rate_limited_df = value_limited_df[value_limited_df['rate'] > 0]
+			# print(rate_limited_df[['time', 'oil', 'rate']])
+			rate_limited_df.loc[:,'rate2'] = \
+					(rate_limited_df[tank_type] - \
+						rate_limited_df[tank_type].shift(1)) / \
+					((rate_limited_df['time'] - \
+						rate_limited_df['time'].shift(1)) / \
+						np.timedelta64(1, 'h'))
 
-		rate_limited_df = value_limited_df[value_limited_df['rate'] > 0]
-		print(rate_limited_df[['time', 'oil', 'rate']])
-		rate_limited_df.loc[:,'rate2'] = \
-				(rate_limited_df['oil'] - \
-					rate_limited_df['oil'].shift(1)) / \
-				((rate_limited_df['time'] - \
-					rate_limited_df['time'].shift(1)) / \
-					np.timedelta64(1, 'h'))
-		print(rate_limited_df[['time', 'oil', 'rate', 'rate2']])
+			this = rate_limited_df[['tag_prefix', 'time', tank_type, 'tankcnt', 'rate2']]
+			that = o_df[['tag_prefix', 'time', tank_type, 'tankcnt']]
+			something = pd.merge(that, this, how='left', on=['tag_prefix', 'time', tank_type, 'tankcnt'])
 
+			print(something.sort_values('time').head(20))
 
-		# rate_o_lr = LinearRegression()
-		# rate_o_lr = rate_o_lr.fit(rate_limited_df['days'].values.reshape(-1, 1), rate_limited_df['rate'])
-		# rate_o_y = rate_o_lr.predict(rate_limited_df['days'].values.reshape(-1, 1))
-		# print(rate_limited_df[['oil', 'rate']])
-		# print(rate_o_y)
-		# o_df['rate'] = rate_o_y
-		# rate_o_dev = np.std(abs(rate_limited_df['oil'] - rate_o_y))
-		# print(rate_limited_df.shape)
-		# print(rate_limited_df[(abs(rate_limited_df['rate'] - rate_o_y) <= 1.96 * rate_o_dev)].shape)
-		# if (rate_o_dev != 0) & \
-		#    (rate_limited_df[(abs(rate_limited_df['rate'] - rate_o_y) >= 1.96 * rate_o_dev)].shape[0] != 0):
-		# 	rate_limited_df.loc[abs(rate_limited_df['rate'] - rate_o_y) >= 1.96 * rate_o_dev, :] = np.nan
-		# 	rate_limited_df['rate'].fillna(method='ffill', inplace=True)
-		# 	rate_limited_df['rate'].fillna(method='bfill', inplace=True)
-		# print(rate_limited_df[['oil', 'rate']])
+			o_df = pd.merge(o_df, rate_limited_df, how='left', on=['time', 'tag_prefix'])
 
-			# oil_df = rate_o_df[(abs(oil_df['oil'] - rate_o_y) <= 1.96 * rate_o_dev) & \
-			# 			  (oil_df['oil'].notnull())][['tag_prefix', 'time', 'oil', 'tankcnt', 'days', 'volume']]
-
-
-		o_df.loc[:,'TANK_TYPE'] = np.full(o_df.shape[0], 'CND')
-		# oil_df = pd.merge(df, oil_df, how='left', on=['tag_prefix', 'time', 'oil', 'tankcnt'])
-		# print(oil_df.head(20))
-		o_df.rename(index=str, columns={'tag_prefix':'TAG_PREFIX', 'time':'DateKey', \
-										  'oil':'TANKLVL', 'tankcnt':'TANKCNT'}, \
-										  inplace=True)
-		o_df.loc[:,'CalcDate'] = o_df['DateKey']
-		return_df = return_df.append(o_df)
-
-	if not df[df['total'].notnull()].empty:
-		t_df = df[df['total'].notnull()]
-		t_lr = LinearRegression()
-		t_poly = PolynomialFeatures(5)
-		t_x_poly = t_poly.fit_transform(t_df['days'].values.reshape(-1, 1))
-		t_lr = t_lr.fit(t_x_poly, t_df['total'])
-		t_y = t_lr.predict(t_x_poly)
-		t_dev = np.std(abs(t_df['total'] - t_y))
-		if (t_dev != 0) & \
-		   (t_df[(abs(t_df['total'] - t_y) <= 1.96 * t_dev)].shape[0] != 0):
-			total_df = t_df[(abs(t_df['total'] - t_y) <= 1.96 * t_dev) & \
-						  (t_df['total'].notnull())][['tag_prefix', 'time', 'total', 'tankcnt', 'days', 'volume']]
-		else:
-			total_df = t_df[t_df['total'].notnull()][['tag_prefix', 'time', 'total', 'tankcnt', 'days', 'volume']]
-		t_x_poly = t_poly.fit_transform(total_df['days'].values.reshape(-1, 1))
-		t_lr = t_lr.fit(t_x_poly, total_df['total'])
-		t_pred_poly = t_poly.fit_transform(t_df['days'].values.reshape(-1, 1))
-		t_y = t_lr.predict(t_pred_poly)
-		total_df = t_df[['tag_prefix', 'time', 'total', 'tankcnt']]
-		total_df.loc[:,'predict'] = t_y
-		total_df.loc[:,'rate'] = (total_df['total'] - total_df['total'].shift(1)) / \
-								 ((total_df['time'] - total_df['time'].shift(1)) / \
-								 np.timedelta64(1, 'h'))
-		total_df.loc[total_df['rate'] < 0, 'rate'] = np.nan
-		total_df['rate'].fillna(method='ffill', inplace=True)
-		total_df['rate'].fillna(method='bfill', inplace=True)
-		# total_df.loc[:,'clean_rate'] = (total_df['total'] - total_df['total'].shift(1)) / \
-		# 							   ((total_df['time'] - total_df['time'].shift(1)) / \
-		# 							   np.timedelta64(1, 'h'))
-		# total_df.loc[total_df['clean_rate'] < 0, 'clean_rate'] = np.nan
-		# total_df['clean_rate'].fillna(method='ffill', inplace=True)
-		# total_df['clean_rate'].fillna(method='bfill', inplace=True)
-		total_df.loc[:,'TANK_TYPE'] = np.full(total_df.shape[0], 'TOT')
-		total_df.rename(index=str, columns={'tag_prefix':'TAG_PREFIX', 'time':'DateKey', \
-											'total':'TANKLVL', 'tankcnt':'TANKCNT'}, \
-											inplace=True)
-		total_df.loc[:,'CalcDate'] = total_df['DateKey']
-		return_df = return_df.append(total_df)
+			if tank_type == 'oil':
+				o_df.loc[:,'TANK_TYPE'] = np.full(o_df.shape[0], 'CND')
+			if tank_type == 'water':
+				o_df.loc[:,'TANK_TYPE'] = np.full(o_df.shape[0], 'WAT')
+			if tank_type == 'total':
+				o_df.loc[:,'TANK_TYPE'] = np.full(o_df.shape[0], 'TOT')
+			# print(oil_df.head(20))
+			o_df.rename(index=str, columns={'tag_prefix':'TAG_PREFIX', 'time':'DateKey', \
+											  tank_type:'TANKLVL', 'tankcnt':'TANKCNT'}, \
+											  inplace=True)
+			o_df.loc[:,'CalcDate'] = o_df['DateKey']
+			return_df = return_df.append(o_df)
 
 	return_df = return_df[['TAG_PREFIX', 'DateKey', 'TANK_TYPE', 'TANKLVL', \
-						   'predict', 'rate', 'TANKCNT', 'CalcDate', 'Volume']]
+						   'predict', 'rate2', 'TANKCNT', 'CalcDate', 'Volume']]
 
 	return return_df.sort_values(['TAG_PREFIX', 'DateKey'])
 
@@ -670,13 +563,10 @@ def build_loop(df, tic_df):
 			max_date = ticket['date'].max()
 			if max_date > df[df['tag_prefix'] == tag]['time'].max():
 				max_date = df[df['tag_prefix'] == tag]['time'].max() - pd.Timedelta('1 days')
-			print(max_date)
 			# if max_date + pd.Timedelta('2 days') >= df[df['tag_prefix'] == tag]['time'].max().normalize():
 			# 	max_date = df[df['tag_prefix'] == tag]['time'].max().normalize() - pd.Timedelta('3 days')
 			# if not df[(df['time'] >= max_date) & (df['tag_prefix'] == tag)].empty:
-			print(tag)
 				# print(df[df['volume'].notnull()]['tag_prefix'].unique())
-			print(df[df['tag_prefix'] == tag]['time'].max())
 			rtag_df = rebuild(df[(df['time'] >= max_date + \
 							  pd.Timedelta('1 hours')) & \
 							 (df['tag_prefix'] == tag)])
@@ -695,28 +585,6 @@ def sql_push(df):
 									 trusted_connection=yes'
 									 )
 	engine = sqlalchemy.create_engine('mssql+pyodbc:///?odbc_connect=%s' % params)
-
-	# # Code to try speeding up SQL insert
-	# conn = engine.connect().connection
-	# cursor = conn.cursor()
-	# records = [tuple(x) for x in df.values]
-	#
-	# insert_ = """
-	# 	INSERT INTO dbo.CleanGWR
-	# 	(TAG_PREFIX
-	# 	,DateKey
-	# 	,TANK_TYPE
-	# 	,TANKLVL
-	# 	,TANKCNT
-	# 	,CalcDate)
-	# 	VALUES"""
-	# def chunker(seq, size):
-	# 	return (seq[pos:pos + size] for pos in xrange(0, len(seq), size))
-	# for batch in chunker(records, 1000):
-	#     rows = ','.join(batch)
-	#     insert_rows = insert_ + rows
-	#     cursor.execute(insert_rows)
-	#     conn.commit()
 
 	df.to_sql('cleanGWR', engine, schema='dbo', if_exists='replace', index=False)
 
@@ -762,23 +630,22 @@ def rate_plot(df):
 
 if __name__ == '__main__':
 	t0 = time.time()
-	df = rate(tank_split(oracle_pull()))
-	df['time'] = pd.to_datetime(df['time'])
-	turb_df = well_pull()
-	# print(turb_df[turb_df['volume'].notnull()]['tag_prefix'].unique())
-	# print(df[df['volume'].notnu
-	df = pd.merge(df, turb_df, how='left', left_on=['tag_prefix', 'time'], \
-										   right_on=['tag_prefix', 'flow_date'])
+	# df = rate(tank_split(oracle_pull()))
+	# df['time'] = pd.to_datetime(df['time'])
+	# turb_df = well_pull()
+
+	# df = pd.merge(df, turb_df, how='left', left_on=['tag_prefix', 'time'], \
+	# 									   right_on=['tag_prefix', 'flow_date'])
 	# print(mdf[mdf['volume'].notnull()]['tag_prefix'].unique())
-	df.to_csv('temp_gwr.csv')
+	# df.to_csv('temp_gwr.csv')
 	df = pd.read_csv('temp_gwr.csv')
-	tic_df = ticket_pull()
-	tic_df.to_csv('temp_ticket.csv')
+	# tic_df = ticket_pull()
+	# tic_df.to_csv('temp_ticket.csv')
 	tic_df = pd.read_csv('temp_ticket.csv')
 	tic_df['date'] = pd.to_datetime(tic_df['date'])
 	df['time'] = pd.to_datetime(df['time'])
 	this = build_loop(df, tic_df)
-	# sql_push(this)
+	sql_push(this)
 	t1 = time.time()
 	print('Took {} seconds to run.'.format(t1-t0))
 
