@@ -449,6 +449,46 @@ def turbine_pull():
 
 	return df
 
+def tag_pull():
+	try:
+		connection = pyodbc.connect(r'Driver={SQL Server Native Client 11.0};'
+									r'Server=SQLDW-L48.BP.Com;'
+									r'Database=TeamOptimizationEngineering;'
+									r'trusted_connection=yes'
+									)
+	except pyodbc.Error:
+		print("Connection Error")
+		sys.exit()
+
+	cursor = connection.cursor()
+	SQLCommand = ("""
+		SELECT  PTD.TAG AS tag_prefix
+				,PTD.API
+				,DF.Facilitykey
+				,DF.FacilityName
+				,DW.WellFlac
+		FROM [TeamOptimizationEngineering].[Reporting].[PITag_Dict] AS PTD
+		JOIN [TeamOptimizationEngineering].[dbo].[DimensionsWells] AS DW
+			ON PTD.API = DW.API
+		JOIN [TeamOptimizationEngineering].[dbo].[DimensionsFacilities] AS DF
+			ON DW.Facilitykey = DF.Facilitykey
+		GROUP BY PTD.TAG, PTD.API, DF.Facilitykey, DF.FacilityName, DF.FacilityCapacity, DW.WellFlac;
+	""")
+
+	cursor.execute(SQLCommand)
+	results = cursor.fetchall()
+
+	df = pd.DataFrame.from_records(results)
+	connection.close()
+
+	try:
+		df.columns = pd.DataFrame(np.matrix(cursor.description))[0]
+	except:
+		df = None
+		print('Dataframe is empty')
+
+	return df.drop_duplicates()
+
 def shift_volumes(df):
 	result_df = pd.DataFrame(columns=df.columns)
 	for tag in df['tag_prefix'].unique():
@@ -564,13 +604,13 @@ def rebuild(df):
 				type_df.loc[:,'TANK_TYPE'] = np.full(type_df.shape[0], 'TOT')
 
 			type_df.rename(index=str, columns={'tag_prefix':'TAG_PREFIX', 'time':'DateKey', \
-											   tank_type:'TANKLVL', 'tankcnt':'TANKCNT'}, \
-											   inplace=True)
+											   tank_type:'TANKLVL', 'tankcnt':'TANKCNT', \
+											   'rate2':'Rate'}, inplace=True)
 			type_df.loc[:,'CalcDate'] = type_df['DateKey']
 			return_df = return_df.append(type_df)
 
 	return_df = return_df[['TAG_PREFIX', 'DateKey', 'TANK_TYPE', 'TANKLVL', \
-						   'predict', 'rate2', 'TANKCNT', 'CalcDate', 'Volume']]
+						   'Rate', 'TANKCNT', 'CalcDate']]
 
 	return return_df.sort_values(['TAG_PREFIX', 'DateKey'])
 
@@ -597,7 +637,7 @@ def build_loop(df, tic_df):
 	return r_df
 
 def turb_contr(gwr_df, turbine_df, limit='tag'):
-	g_df = g_df[['Facilitykey', 'time', 'FacilityName', 'water', 'oil']]
+	g_df = gwr_df[['Facilitykey', 'time', 'FacilityName', 'water', 'oil']]
 	g_df['time'] = pd.DatetimeIndex(g_df['time']).normalize()
 	g_df = g_df.groupby(['Facilitykey', 'FacilityName', 'time'], as_index=False).mean()
 
@@ -674,21 +714,29 @@ def rate_plot(df):
 
 if __name__ == '__main__':
 	t0 = time.time()
-	# df = rate(tank_split(oracle_pull()))
-	# df['time'] = pd.to_datetime(df['time'])
+	df = rate(tank_split(oracle_pull()))
+	df['time'] = pd.to_datetime(df['time'])
 	turb_df = shift_volumes(turbine_pull())
+	tag_df = tag_pull()
 
 	# df = pd.merge(df, turb_df, how='left', left_on=['tag_prefix', 'time'], \
 	# 									   right_on=['tag_prefix', 'flow_date'])
-	# df.to_csv('temp_gwr.csv')
-	# df = pd.read_csv('temp_gwr.csv')
-	# tic_df = ticket_pull()
-	# tic_df.to_csv('temp_ticket.csv')
-	# tic_df = pd.read_csv('temp_ticket.csv')
-	# tic_df['date'] = pd.to_datetime(tic_df['date'])
-	# df['time'] = pd.to_datetime(df['time'])
-	# clean_rate_df = build_loop(df, tic_df)
-	# sql_push(clean_rate_df)
+	df.to_csv('temp_gwr.csv')
+	df = pd.read_csv('temp_gwr.csv')
+	tic_df = ticket_pull()
+	tic_df.to_csv('temp_ticket.csv')
+	tic_df = pd.read_csv('temp_ticket.csv')
+	tic_df['date'] = pd.to_datetime(tic_df['date'])
+	df['time'] = pd.to_datetime(df['time'])
+	clean_rate_df = build_loop(df, tic_df)
+	sql_push(clean_rate_df)
+
+	facility_rate_df = pd.merge(clean_rate_df, tag_df, how='left', \
+								right_on='tag_prefix', left_on='TAG_PREFIX')
+	facility_rate_df = facility_rate_df[['FacilityName', 'TANKLVL', 'TANK_TYPE', \
+										 'DateKey', 'Rate']].groupby(\
+					   ['FacilityName', 'TANKLVL', 'TANK_TYPE', 'DateKey'], \
+					   ignore_index=True).mean()
 	t1 = time.time()
 	print('Took {} seconds to run.'.format(t1-t0))
 
