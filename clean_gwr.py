@@ -579,23 +579,28 @@ def rebuild(df):
 			# Remove any small negative fluctuations
 			rate_limited_df = value_limited_df[value_limited_df['rate'] >= 0]
 
+			# Calculate second rates off of these filtered values
 			rate_limited_df.loc[:,'rate2'] = \
 					(rate_limited_df[tank_type] - \
 						rate_limited_df[tank_type].shift(1)) / \
 					((rate_limited_df['time'] - \
 						rate_limited_df['time'].shift(1)) / \
 						np.timedelta64(1, 'h'))
+
+			# Fill negative rates with values from original rate calculation
+			# and forward fill 0 rates
 			rate_limited_df.loc[rate_limited_df['rate2'] < 0, 'rate2'] = np.nan
 			rate_limited_df['rate2'].fillna(rate_limited_df['rate'], inplace=True)
 			rate_limited_df.loc[rate_limited_df['rate2'] == 0, 'rate2'] = np.nan
 			rate_limited_df['rate2'].fillna(method='ffill', inplace=True)
 
+			# Limit columns for both dataframes before merging and backfill nan
 			full_df = full_df[['tag_prefix', 'time', tank_type, 'tankcnt']]
 			rate_limited_df = rate_limited_df[['tag_prefix', 'time', tank_type, 'rate2']]
-
 			type_df = pd.merge(full_df, rate_limited_df, how='left', on=['time', 'tag_prefix', tank_type])
 			type_df.fillna(method='bfill', inplace=True)
 
+			# Fill in tank types depending on which iteration we're on
 			if tank_type == 'oil':
 				type_df.loc[:,'TANK_TYPE'] = np.full(type_df.shape[0], 'CND')
 			if tank_type == 'water':
@@ -603,6 +608,8 @@ def rebuild(df):
 			if tank_type == 'total':
 				type_df.loc[:,'TANK_TYPE'] = np.full(type_df.shape[0], 'TOT')
 
+			# Fill in columns to match those expected in SQLDW and append this
+			# to the return dataframe
 			type_df.rename(index=str, columns={'tag_prefix':'TAG_PREFIX', 'time':'DateKey', \
 											   tank_type:'TANKLVL', 'tankcnt':'TANKCNT', \
 											   'rate2':'Rate'}, inplace=True)
@@ -636,31 +643,30 @@ def build_loop(df, tic_df):
 			r_df = r_df.append(rtag_df)
 	return r_df
 
-def turb_contr(gwr_df, turbine_df, limit='tag'):
-	g_df = gwr_df[['Facilitykey', 'time', 'FacilityName', 'water', 'oil']]
-	g_df['time'] = pd.DatetimeIndex(g_df['time']).normalize()
-	g_df = g_df.groupby(['Facilitykey', 'FacilityName', 'time'], as_index=False).mean()
+def turb_contr(gwr_df, turbine_df):
+	gwr_df['DateKey'] = pd.DatetimeIndex(gwr_df['DateKey']).normalize()
+	gwr_df = gwr_df.groupby(['FacilityName', 'TANK_TYPE', 'DateKey'], as_index=False).mean()
 
-	t_df.loc[:, 'time'] = pd.to_datetime(t_df['flow_date'])
-	t_df = t_df[['tag_prefix', 'FacilityName', 'time', 'volume', 'WellFlac']]
-	t_df.loc[:, 'contr'] = np.nan
-	t_df.loc[:, 'oil'] = np.nan
-	t_df.loc[:, 'water'] = np.nan
-	t_df = t_df[t_df['time'] >= g_df['time'].min()]
+	turbine_df.loc[:, 'flow_date'] = pd.to_datetime(turbine_df['flow_date'])
+	turbine_df.loc[:, 'contr'] = np.nan
+	turbine_df.loc[:, 'oil'] = np.nan
+	turbine_df = turbine_df[turbine_df['flow_date'] >= gwr_df['DateKey'].min()]
 
-	for fac in t_df['FacilityName'].unique():
-		for time in t_df[t_df['FacilityName'] == fac]['time']:
-			contr = t_df[(t_df['FacilityName'] == fac) & (t_df['time'] == time)]['volume'].sum()
-			t_df.loc[(t_df['FacilityName'] == fac) & (t_df['time'] == time), 'contr'] = contr
-			match_df = g_df[(g_df['FacilityName'] == fac) & (g_df['time'] == time)]
-			if len(match_df['oil'].values) > 0:
-				t_df.loc[(t_df['FacilityName'] == fac) & (t_df['time'] == time), 'oil'] = match_df['oil'].values[0]
-			if len(match_df['water'].values) > 0:
-				t_df.loc[(t_df['FacilityName'] == fac) & (t_df['time'] == time), 'water'] = match_df['water'].values[0]
+	for fac in turbine_df['FacilityName'].unique():
+		for time in turbine_df[turbine_df['FacilityName'] == fac]['flow_date']:
+			contr = turbine_df[(turbine_df['FacilityName'] == fac) & \
+							   (turbine_df['flow_date'] == time)]['volume'].sum()
+			turbine_df.loc[(turbine_df['FacilityName'] == fac) & \
+						   (turbine_df['flow_date'] == time), 'contr'] = contr
+			match_df = gwr_df[(gwr_df['FacilityName'] == fac) & (gwr_df['DateKey'] == time)]
+			print(match_df)
+			if len(match_df['Rate'].values) > 0:
+				turbine_df.loc[(turbine_df['FacilityName'] == fac) & \
+							   (turbine_df['flow_date'] == time), 'oil'] = match_df['Rate'].values[0]
 
-	t_df.loc[:, 'oil_diff'] = t_df['oil'] - t_df['oil'].shift(1)
-	t_df.loc[:, 'oil_contr'] = t_df['oil_diff'] * (t_df['volume'] / t_df['contr'])
-	return t_df
+	turbine_df.loc[:, 'oil_contr'] = (turbine_df['oil'] - turbine_df['oil'].shift(1)) * \
+									 (turbine_df['volume'] / turbine_df['contr'])
+	return turbine_df
 
 def sql_push(df):
 	params = urllib.parse.quote_plus('Driver={SQL Server Native Client 11.0};\
@@ -715,28 +721,34 @@ def rate_plot(df):
 if __name__ == '__main__':
 	t0 = time.time()
 	df = rate(tank_split(oracle_pull()))
-	df['time'] = pd.to_datetime(df['time'])
-	turb_df = shift_volumes(turbine_pull())
-	tag_df = tag_pull()
+	tic_df = ticket_pull()
 
-	# df = pd.merge(df, turb_df, how='left', left_on=['tag_prefix', 'time'], \
-	# 									   right_on=['tag_prefix', 'flow_date'])
 	df.to_csv('temp_gwr.csv')
 	df = pd.read_csv('temp_gwr.csv')
-	tic_df = ticket_pull()
 	tic_df.to_csv('temp_ticket.csv')
 	tic_df = pd.read_csv('temp_ticket.csv')
+
 	tic_df['date'] = pd.to_datetime(tic_df['date'])
 	df['time'] = pd.to_datetime(df['time'])
 	clean_rate_df = build_loop(df, tic_df)
-	sql_push(clean_rate_df)
+	# sql_push(clean_rate_df)
+
+	turb_df = shift_volumes(turbine_pull())
+	tag_df = tag_pull()
+
+	turb_df = pd.merge(turb_df, tag_df, how='left', right_on='tag_prefix', \
+					   left_on='tag_prefix')
 
 	facility_rate_df = pd.merge(clean_rate_df, tag_df, how='left', \
 								right_on='tag_prefix', left_on='TAG_PREFIX')
-	facility_rate_df = facility_rate_df[['FacilityName', 'TANKLVL', 'TANK_TYPE', \
+	facility_rate_df = facility_rate_df[['FacilityName', 'TANK_TYPE', \
 										 'DateKey', 'Rate']].groupby(\
-					   ['FacilityName', 'TANKLVL', 'TANK_TYPE', 'DateKey'], \
-					   ignore_index=True).mean()
+					   ['FacilityName', 'TANK_TYPE', 'DateKey'], \
+					   as_index=False).mean()
+	facility_rate_df.sort_values(['FacilityName', 'DateKey'], inplace=True)
+
+	contribution_df = turb_contr(facility_rate_df, turb_df)
+
 	t1 = time.time()
 	print('Took {} seconds to run.'.format(t1-t0))
 
