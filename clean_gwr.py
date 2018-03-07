@@ -482,6 +482,20 @@ def rate(df):
 		df.drop(df[(df['tag_prefix'] == tag) & (df['tankcnt'] < tanks)].index, inplace=True)
 	return df.sort_values(['tag_prefix', 'time'])
 
+def outlier_regression(df, tank_type):
+	lr = LinearRegression()
+	poly = PolynomialFeatures(5)
+	x_poly = poly.fit_transform(df['days'].values.reshape(-1, 1))
+	lr = lr.fit(x_poly, df[tank_type])
+	y = lr.predict(x_poly)
+	dev = np.std(abs(df[tank_type] - y))
+	if (dev != 0) & (df[(abs(df[tank_type] - y) <= 1.96 * dev)].shape[0] != 0):
+		return df[(abs(df[tank_type] - y) <= 1.96 * dev) & \
+				  (df[tank_type].notnull())]\
+				 [['tag_prefix', 'time', tank_type, 'tankcnt', 'days', 'volume']]
+	else:
+		return df[['tag_prefix', 'time', tank_type, 'tankcnt', 'days', 'volume']]
+
 def rebuild(df):
 	return_df = pd.DataFrame(columns=['TAG_PREFIX', 'DateKey', 'TANK_TYPE', \
 									  'TANKLVL', 'predict', 'rate2', \
@@ -491,35 +505,31 @@ def rebuild(df):
 	df.loc[:,'time'] = pd.to_datetime(df['time'])
 	day_min = df['time'].min()
 	df.loc[:,'days'] = (df['time'] - day_min).dt.total_seconds() / (24 * 60 * 60)
-	# print(df[df['volume'].notnull()].shape)
 
 	# Loop through the same model building process for water, oil, and total
 	for tank_type in ['oil']:
 		if not df[df[tank_type].notnull()].empty:
 			full_df = df[df[tank_type].notnull()]
-			lr = LinearRegression()
-			poly = PolynomialFeatures(5)
-			x_poly = poly.fit_transform(full_df['days'].values.reshape(-1, 1))
-			lr = lr.fit(x_poly, full_df[tank_type])
-			y = lr.predict(x_poly)
-			dev = np.std(abs(full_df[tank_type] - y))
-			if (dev != 0) & (full_df[(abs(full_df[tank_type] - y) <= 1.96 * dev)].shape[0] != 0):
-				value_limited_df = full_df[(abs(full_df[tank_type] - y) <= 1.96 * dev) & \
-								   (full_df[tank_type].notnull())]\
-								   [['tag_prefix', 'time', tank_type, 'tankcnt', 'days', 'volume']]
-			else:
-				value_limited_df = full_df[['tag_prefix', 'time', tank_type, 'tankcnt', 'days', 'volume']]
 
-			value_limited_df.loc[:,'rate'] = (value_limited_df[tank_type] - \
-											  value_limited_df[tank_type].shift(1)) / \
-											 ((value_limited_df['time'] - \
-											  value_limited_df['time'].shift(1)) / \
-											  np.timedelta64(1, 'h'))
+			# Block for removing outliers with linear regression
+			# full_df = outlier_regression(full_df, tank_type)
 
-			print(value_limited_df[['time', 'oil', 'rate']].head(50))
+			# Calculate an initial rate from nonnull values
+			full_df.loc[:,'rate'] = (full_df[tank_type] - \
+								  	 full_df[tank_type].shift(1)) / \
+								 	((full_df['time'] - \
+								  	 full_df['time'].shift(1)) / \
+								  	 np.timedelta64(1, 'h'))
 
-			rate_limited_df = value_limited_df[value_limited_df['rate'] > 0]
-			print(rate_limited_df[['time', 'oil', 'rate']].head(20))
+			# Limit dataframe to values where the rate is not 0
+			# This is meant to remove repeated values but keep any negative
+			# jumps (hauls) which are then reset to a rate of 0
+			value_limited_df = full_df[full_df['rate'] != 0]
+			value_limited_df.loc[value_limited_df['rate'] < -20, 'rate'] = 0
+
+			# Remove any small negative fluctuations
+			rate_limited_df = value_limited_df[value_limited_df['rate'] >= 0]
+
 			rate_limited_df.loc[:,'rate2'] = \
 					(rate_limited_df[tank_type] - \
 						rate_limited_df[tank_type].shift(1)) / \
@@ -528,14 +538,14 @@ def rebuild(df):
 						np.timedelta64(1, 'h'))
 			rate_limited_df.loc[rate_limited_df['rate2'] < 0, 'rate2'] = np.nan
 			rate_limited_df['rate2'].fillna(rate_limited_df['rate'], inplace=True)
-			print(rate_limited_df[['time', 'oil', 'rate', 'rate2']].head(20))
-			this = rate_limited_df[['tag_prefix', 'time', tank_type, 'tankcnt', 'rate2']]
-			that = full_df[['tag_prefix', 'time', tank_type, 'tankcnt']]
-			something = pd.merge(that, this, how='left', on=['tag_prefix', 'time', tank_type, 'tankcnt'])
+			rate_limited_df.loc[rate_limited_df['rate2'] == 0, 'rate2'] = np.nan
+			rate_limited_df['rate2'].fillna(method='ffill', inplace=True)
 
-			# print(something.sort_values('time').head(20))
+			full_df = full_df[['tag_prefix', 'time', tank_type, 'tankcnt']]
+			rate_limited_df = rate_limited_df[['tag_prefix', 'time', tank_type, 'rate2']]
 
-			type_df = pd.merge(full_df, rate_limited_df, how='left', on=['time', 'tag_prefix'])
+			type_df = pd.merge(full_df, rate_limited_df, how='left', on=['time', 'tag_prefix', tank_type])
+			type_df.fillna(method='bfill', inplace=True)
 
 			if tank_type == 'oil':
 				type_df.loc[:,'TANK_TYPE'] = np.full(type_df.shape[0], 'CND')
@@ -568,16 +578,12 @@ def build_loop(df, tic_df):
 			max_date = ticket['date'].max()
 			if max_date > df[df['tag_prefix'] == tag]['time'].max():
 				max_date = df[df['tag_prefix'] == tag]['time'].max() - pd.Timedelta('1 days')
-			# if max_date + pd.Timedelta('2 days') >= df[df['tag_prefix'] == tag]['time'].max().normalize():
-			# 	max_date = df[df['tag_prefix'] == tag]['time'].max().normalize() - pd.Timedelta('3 days')
-			# if not df[(df['time'] >= max_date) & (df['tag_prefix'] == tag)].empty:
-				# print(df[df['volume'].notnull()]['tag_prefix'].unique())
+
 			rtag_df = rebuild(df[(df['time'] >= max_date + \
 							  pd.Timedelta('1 hours')) & \
 							 (df['tag_prefix'] == tag)])
 			r_df = r_df.append(rtag_df)
-			# else:
-			# 	pass
+
 		else:
 			rtag_df = rebuild(df[df['tag_prefix'] == tag])
 			r_df = r_df.append(rtag_df)
