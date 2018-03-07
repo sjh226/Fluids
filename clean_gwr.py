@@ -356,46 +356,6 @@ def oracle_pull():
 
 	return df
 
-def well_pull():
-	connection = cx_Oracle.connect("REPORTING", "REPORTING", "L48APPSP1.WORLD")
-
-	cursor = connection.cursor()
-	query = ("""
-		SELECT  TAG_PREFIX
-				,TIME AS flow_date
-				,CTS_VC AS volume
-		FROM DATA_QUALITY.PI_WAM_ALL_WELLS_OPS
-		WHERE (CTS_VC IS NOT NULL)
-		  AND (TAG_PREFIX LIKE 'WAM-CH320C1-160H%'
-			OR TAG_PREFIX LIKE 'WAM-CH452K29150H%'
-			OR TAG_PREFIX LIKE 'WAM-CH533B3_80D%'
-			OR TAG_PREFIX LIKE 'WAM-CL29_150H%'
-			OR TAG_PREFIX LIKE 'WAM-CL29_160H%'
-			OR TAG_PREFIX LIKE 'WAM-HP13_150%'
-			OR TAG_PREFIX LIKE 'WAM-LM8_115H%'
-			OR TAG_PREFIX LIKE 'WAM-ML11_150H%'
-			OR TAG_PREFIX LIKE 'WAM-ML11_160H%'
-			OR TAG_PREFIX LIKE 'WAM-MN9_150D%')
-		ORDER BY TAG_PREFIX, TIME
-	""")
-
-	cursor.execute(query)
-	results = cursor.fetchall()
-
-	df = pd.DataFrame.from_records(results)
-
-	try:
-		df.columns = pd.DataFrame(np.matrix(cursor.description))[0]
-		df.columns = [col.lower() for col in df.columns]
-	except:
-		df = None
-		print('Dataframe is empty')
-
-	cursor.close()
-	connection.close()
-
-	return df
-
 def ticket_pull():
 	try:
 		connection = pyodbc.connect(r'Driver={SQL Server Native Client 11.0};'
@@ -447,6 +407,55 @@ def ticket_pull():
 	df['date'] = pd.to_datetime(df['date'])
 
 	return df.drop_duplicates()
+
+def turbine_pull():
+	connection = cx_Oracle.connect("REPORTING", "REPORTING", "L48APPSP1.WORLD")
+
+	cursor = connection.cursor()
+	query = ("""
+		SELECT  TAG_PREFIX
+				,TRUNC(TIME) AS flow_date
+				,MAX(CTS_VC) AS volume
+		FROM DATA_QUALITY.PI_WAM_ALL_WELLS_OPS
+		WHERE (CTS_VC IS NOT NULL)
+		  AND (TAG_PREFIX LIKE 'WAM-CH320C1-160H%'
+			OR TAG_PREFIX LIKE 'WAM-CH452K29150H%'
+			OR TAG_PREFIX LIKE 'WAM-CH533B3_80D%'
+			OR TAG_PREFIX LIKE 'WAM-CL29_150H%'
+			OR TAG_PREFIX LIKE 'WAM-CL29_160H%'
+			OR TAG_PREFIX LIKE 'WAM-HP13_150%'
+			OR TAG_PREFIX LIKE 'WAM-LM8_115H%'
+			OR TAG_PREFIX LIKE 'WAM-ML11_150H%'
+			OR TAG_PREFIX LIKE 'WAM-ML11_160H%'
+			OR TAG_PREFIX LIKE 'WAM-MN9_150D%')
+		GROUP BY TAG_PREFIX, TRUNC(TIME)
+		ORDER BY TAG_PREFIX, TRUNC(TIME)
+	""")
+
+	cursor.execute(query)
+	results = cursor.fetchall()
+
+	df = pd.DataFrame.from_records(results)
+
+	try:
+		df.columns = pd.DataFrame(np.matrix(cursor.description))[0]
+		df.columns = [col.lower() for col in df.columns]
+	except:
+		df = None
+		print('Dataframe is empty')
+
+	cursor.close()
+	connection.close()
+
+	return df
+
+def shift_volumes(df):
+	result_df = pd.DataFrame(columns=df.columns)
+	for tag in df['tag_prefix'].unique():
+		tag_df = df[df['tag_prefix'] == tag]
+		tag_df.loc[:, 'volume'] = tag_df.loc[:, 'volume'].shift(-1)
+		result_df = result_df.append(tag_df)
+	return result_df
 
 def tank_split(df):
 	water_df = df[df['tank_type'] == 'WAT'][['tag_prefix', 'time', 'tankvol', 'tankcnt']]
@@ -587,6 +596,32 @@ def build_loop(df, tic_df):
 			r_df = r_df.append(rtag_df)
 	return r_df
 
+def turb_contr(gwr_df, turbine_df, limit='tag'):
+	g_df = g_df[['Facilitykey', 'time', 'FacilityName', 'water', 'oil']]
+	g_df['time'] = pd.DatetimeIndex(g_df['time']).normalize()
+	g_df = g_df.groupby(['Facilitykey', 'FacilityName', 'time'], as_index=False).mean()
+
+	t_df.loc[:, 'time'] = pd.to_datetime(t_df['flow_date'])
+	t_df = t_df[['tag_prefix', 'FacilityName', 'time', 'volume', 'WellFlac']]
+	t_df.loc[:, 'contr'] = np.nan
+	t_df.loc[:, 'oil'] = np.nan
+	t_df.loc[:, 'water'] = np.nan
+	t_df = t_df[t_df['time'] >= g_df['time'].min()]
+
+	for fac in t_df['FacilityName'].unique():
+		for time in t_df[t_df['FacilityName'] == fac]['time']:
+			contr = t_df[(t_df['FacilityName'] == fac) & (t_df['time'] == time)]['volume'].sum()
+			t_df.loc[(t_df['FacilityName'] == fac) & (t_df['time'] == time), 'contr'] = contr
+			match_df = g_df[(g_df['FacilityName'] == fac) & (g_df['time'] == time)]
+			if len(match_df['oil'].values) > 0:
+				t_df.loc[(t_df['FacilityName'] == fac) & (t_df['time'] == time), 'oil'] = match_df['oil'].values[0]
+			if len(match_df['water'].values) > 0:
+				t_df.loc[(t_df['FacilityName'] == fac) & (t_df['time'] == time), 'water'] = match_df['water'].values[0]
+
+	t_df.loc[:, 'oil_diff'] = t_df['oil'] - t_df['oil'].shift(1)
+	t_df.loc[:, 'oil_contr'] = t_df['oil_diff'] * (t_df['volume'] / t_df['contr'])
+	return t_df
+
 def sql_push(df):
 	params = urllib.parse.quote_plus('Driver={SQL Server Native Client 11.0};\
 									 Server=SQLDW-TEST-L48.BP.Com;\
@@ -639,21 +674,21 @@ def rate_plot(df):
 
 if __name__ == '__main__':
 	t0 = time.time()
-	df = rate(tank_split(oracle_pull()))
-	df['time'] = pd.to_datetime(df['time'])
-	turb_df = well_pull()
+	# df = rate(tank_split(oracle_pull()))
+	# df['time'] = pd.to_datetime(df['time'])
+	turb_df = shift_volumes(turbine_pull())
 
-	df = pd.merge(df, turb_df, how='left', left_on=['tag_prefix', 'time'], \
-										   right_on=['tag_prefix', 'flow_date'])
-	df.to_csv('temp_gwr.csv')
-	df = pd.read_csv('temp_gwr.csv')
-	tic_df = ticket_pull()
-	tic_df.to_csv('temp_ticket.csv')
-	tic_df = pd.read_csv('temp_ticket.csv')
-	tic_df['date'] = pd.to_datetime(tic_df['date'])
-	df['time'] = pd.to_datetime(df['time'])
-	clean_rate_df = build_loop(df, tic_df)
-	sql_push(clean_rate_df)
+	# df = pd.merge(df, turb_df, how='left', left_on=['tag_prefix', 'time'], \
+	# 									   right_on=['tag_prefix', 'flow_date'])
+	# df.to_csv('temp_gwr.csv')
+	# df = pd.read_csv('temp_gwr.csv')
+	# tic_df = ticket_pull()
+	# tic_df.to_csv('temp_ticket.csv')
+	# tic_df = pd.read_csv('temp_ticket.csv')
+	# tic_df['date'] = pd.to_datetime(tic_df['date'])
+	# df['time'] = pd.to_datetime(df['time'])
+	# clean_rate_df = build_loop(df, tic_df)
+	# sql_push(clean_rate_df)
 	t1 = time.time()
 	print('Took {} seconds to run.'.format(t1-t0))
 
