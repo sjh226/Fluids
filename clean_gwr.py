@@ -568,9 +568,7 @@ def rebuild(df):
 def build_loop(df, tic_df):
 	r_df = pd.DataFrame(columns=['TAG_PREFIX', 'DateKey', 'TANK_TYPE', \
 								 'TANKLVL', 'TANKCNT', 'CalcDate', 'Volume'])
-	print('--------------------------------')
-	# for tag in df['tag_prefix'].unique():
-	for tag in ['WAM-CH533B3_80D']:
+	for tag in df['tag_prefix'].unique():
 		ticket = tic_df[(tic_df['ticketType'] != 'Disposition') & (tic_df['TAG'] == tag)]
 		if df[(df['tag_prefix'] == tag) & (df['oil'].notnull())].shape[0] == 0:
 			pass
@@ -641,22 +639,21 @@ def rate_plot(df):
 
 if __name__ == '__main__':
 	t0 = time.time()
-	# df = rate(tank_split(oracle_pull()))
-	# df['time'] = pd.to_datetime(df['time'])
-	# turb_df = well_pull()
+	df = rate(tank_split(oracle_pull()))
+	df['time'] = pd.to_datetime(df['time'])
+	turb_df = well_pull()
 
-	# df = pd.merge(df, turb_df, how='left', left_on=['tag_prefix', 'time'], \
-	# 									   right_on=['tag_prefix', 'flow_date'])
-	# print(mdf[mdf['volume'].notnull()]['tag_prefix'].unique())
-	# df.to_csv('temp_gwr.csv')
+	df = pd.merge(df, turb_df, how='left', left_on=['tag_prefix', 'time'], \
+										   right_on=['tag_prefix', 'flow_date'])
+	df.to_csv('temp_gwr.csv')
 	df = pd.read_csv('temp_gwr.csv')
-	# tic_df = ticket_pull()
-	# tic_df.to_csv('temp_ticket.csv')
+	tic_df = ticket_pull()
+	tic_df.to_csv('temp_ticket.csv')
 	tic_df = pd.read_csv('temp_ticket.csv')
 	tic_df['date'] = pd.to_datetime(tic_df['date'])
 	df['time'] = pd.to_datetime(df['time'])
-	this = build_loop(df, tic_df)
-	# sql_push(this)
+	clean_rate_df = build_loop(df, tic_df)
+	sql_push(clean_rate_df)
 	t1 = time.time()
 	print('Took {} seconds to run.'.format(t1-t0))
 
