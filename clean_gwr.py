@@ -75,7 +75,7 @@ def oracle_pull():
 		WHERE (Vol.TankVol > 0 AND TIME >= ADD_MONTHS(TRUNC(SYSDATE), -12))
 		  AND (TAG_PREFIX LIKE 'WAM-CH320C1-160H%'
 				OR TAG_PREFIX LIKE 'WAM-CH452K29150H%'
-				  OR TAG_PREFIX LIKE 'WAM-CH533B3_80D%'
+				OR TAG_PREFIX LIKE 'WAM-CH533B3_80D%'
 				OR TAG_PREFIX LIKE 'WAM-CL29_150H%'
 				OR TAG_PREFIX LIKE 'WAM-CL29_160H%'
 				OR TAG_PREFIX LIKE 'WAM-HP13_150%'
@@ -633,9 +633,7 @@ def build_loop(df, tic_df):
 			if max_date > df[df['tag_prefix'] == tag]['time'].max():
 				max_date = df[df['tag_prefix'] == tag]['time'].max() - pd.Timedelta('1 days')
 
-			rtag_df = rebuild(df[(df['time'] >= max_date + \
-							  pd.Timedelta('1 hours')) & \
-							 (df['tag_prefix'] == tag)])
+			rtag_df = rebuild(df[(df['tag_prefix'] == tag)])
 			r_df = r_df.append(rtag_df)
 
 		else:
@@ -645,7 +643,7 @@ def build_loop(df, tic_df):
 
 def turb_contr(gwr_df, turbine_df):
 	gwr_df['DateKey'] = pd.DatetimeIndex(gwr_df['DateKey']).normalize()
-	gwr_df = gwr_df.groupby(['FacilityName', 'TANK_TYPE', 'DateKey'], as_index=False).mean()
+	# gwr_df = gwr_df.groupby(['FacilityName', 'TANK_TYPE', 'DateKey'], as_index=False).mean()
 
 	turbine_df.loc[:, 'flow_date'] = pd.to_datetime(turbine_df['flow_date'])
 	turbine_df.loc[:, 'contr'] = np.nan
@@ -658,14 +656,15 @@ def turb_contr(gwr_df, turbine_df):
 							   (turbine_df['flow_date'] == time)]['volume'].sum()
 			turbine_df.loc[(turbine_df['FacilityName'] == fac) & \
 						   (turbine_df['flow_date'] == time), 'contr'] = contr
-			match_df = gwr_df[(gwr_df['FacilityName'] == fac) & (gwr_df['DateKey'] == time)]
-			print(match_df)
-			if len(match_df['Rate'].values) > 0:
-				turbine_df.loc[(turbine_df['FacilityName'] == fac) & \
-							   (turbine_df['flow_date'] == time), 'oil'] = match_df['Rate'].values[0]
 
-	turbine_df.loc[:, 'oil_contr'] = (turbine_df['oil'] - turbine_df['oil'].shift(1)) * \
-									 (turbine_df['volume'] / turbine_df['contr'])
+			tank_oil = gwr_df[(gwr_df['FacilityName'] == fac) & \
+							  (gwr_df['DateKey'] == time)]['Rate'].mean()
+			turbine_df.loc[(turbine_df['FacilityName'] == fac) & \
+						   (turbine_df['flow_date'] == time), 'oil'] = tank_oil
+
+	turbine_df.loc[:, 'contr'] = (turbine_df['volume'] / turbine_df['contr'])
+	turbine_df.loc[:, 'oil_rate'] = (turbine_df['contr'] * turbine_df['oil'])
+
 	return turbine_df
 
 def sql_push(df):
@@ -741,6 +740,7 @@ if __name__ == '__main__':
 
 	facility_rate_df = pd.merge(clean_rate_df, tag_df, how='left', \
 								right_on='tag_prefix', left_on='TAG_PREFIX')
+
 	facility_rate_df = facility_rate_df[['FacilityName', 'TANK_TYPE', \
 										 'DateKey', 'Rate']].groupby(\
 					   ['FacilityName', 'TANK_TYPE', 'DateKey'], \
