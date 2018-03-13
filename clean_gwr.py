@@ -664,10 +664,12 @@ def turb_contr(gwr_df, turbine_df):
 
 	turbine_df.loc[:, 'contr'] = (turbine_df['volume'] / turbine_df['contr'])
 	turbine_df.loc[:, 'oil_rate'] = (turbine_df['contr'] * turbine_df['oil'])
+	turbine_df.rename(index=str, columns={'tag_prefix':'TAG_PREFIX', 'flow_date':'DateKey', \
+									   	  'oil_rate':'OilRate', 'volume':'TurbVolume'}, inplace=True)
 
-	return turbine_df
+	return turbine_df[['TAG_PREFIX', 'WellFlac', 'FacilityName', 'DateKey', 'TurbVolume', 'OilRate']]
 
-def sql_push(df):
+def sql_push(df, table):
 	params = urllib.parse.quote_plus('Driver={SQL Server Native Client 11.0};\
 									 Server=SQLDW-TEST-L48.BP.Com;\
 									 Database=TeamOperationsAnalytics;\
@@ -675,7 +677,7 @@ def sql_push(df):
 									 )
 	engine = sqlalchemy.create_engine('mssql+pyodbc:///?odbc_connect=%s' % params)
 
-	df.to_sql('cleanGWR', engine, schema='dbo', if_exists='replace', index=False)
+	df.to_sql(table, engine, schema='dbo', if_exists='replace', index=False)
 
 def test_plot(df, clean_df):
 	plt.close()
@@ -730,7 +732,7 @@ if __name__ == '__main__':
 	tic_df['date'] = pd.to_datetime(tic_df['date'])
 	df['time'] = pd.to_datetime(df['time'])
 	clean_rate_df = build_loop(df, tic_df)
-	# sql_push(clean_rate_df)
+	sql_push(clean_rate_df, 'cleanGWR')
 
 	turb_df = shift_volumes(turbine_pull())
 	tag_df = tag_pull()
@@ -748,6 +750,7 @@ if __name__ == '__main__':
 	facility_rate_df.sort_values(['FacilityName', 'DateKey'], inplace=True)
 
 	contribution_df = turb_contr(facility_rate_df, turb_df)
+	sql_push(contribution_df, 'turbineRates')
 
 	t1 = time.time()
 	print('Took {} seconds to run.'.format(t1-t0))
