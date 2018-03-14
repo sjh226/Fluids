@@ -499,36 +499,27 @@ def shift_volumes(df):
 
 def tank_split(df):
 	water_df = df[df['tank_type'] == 'WAT'][['tag_prefix', 'time', 'tankvol', 'tankcnt']]
-	water_df.columns = ['tag_prefix', 'time', 'water', 'tankcnt']
+	water_df.columns = ['tag_prefix', 'time', 'water', 'tankcnt_w']
 	oil_df = df[df['tank_type'] == 'CND'][['tag_prefix', 'time', 'tankvol', 'tankcnt']]
-	oil_df.columns = ['tag_prefix', 'time', 'oil', 'tankcnt']
+	oil_df.columns = ['tag_prefix', 'time', 'oil', 'tankcnt_o']
 	total_df = df[df['tank_type'] == 'TOT'][['tag_prefix', 'time', 'tankvol', 'tankcnt']]
-	total_df.columns = ['tag_prefix', 'time', 'total', 'tankcnt']
+	total_df.columns = ['tag_prefix', 'time', 'total', 'tankcnt_t']
 
-	base_df = water_df.merge(oil_df, on=['tag_prefix', 'time', 'tankcnt'], how='outer')
-	df = base_df.merge(total_df, on=['tag_prefix', 'time', 'tankcnt'], how='outer')
+	base_df = water_df.merge(oil_df, on=['tag_prefix', 'time'], how='outer')
+	df = base_df.merge(total_df, on=['tag_prefix', 'time'], how='outer')
 
 	df.loc[df['oil'].isnull(), 'oil'] = df.loc[df['oil'].isnull(), 'total'] - \
 										df.loc[df['oil'].isnull(), 'water']
 
 	return df.sort_values(['tag_prefix', 'time'])
 
-def rate(df):
-	df.loc[:,'oil_rate'] = np.nan
-	df.loc[:,'water_rate'] = np.nan
-	df.loc[:,'total_rate'] = np.nan
+def tank_match(df):
+	df['tankcnt'] = np.nan
 	for tag in df['tag_prefix'].unique():
-		df.loc[df['tag_prefix'] == tag, 'oil_rate'] = \
-			   df[df['tag_prefix'] == tag]['oil'] - \
-			   df[df['tag_prefix'] == tag]['oil'].shift(1)
-		df.loc[df['tag_prefix'] == tag, 'water_rate'] = \
-			   df[df['tag_prefix'] == tag]['water'] - \
-			   df[df['tag_prefix'] == tag]['water'].shift(1)
-		df.loc[df['tag_prefix'] == tag, 'total_rate'] = \
-			   df[df['tag_prefix'] == tag]['total'] - \
-			   df[df['tag_prefix'] == tag]['total'].shift(1)
-		tanks = df[df['tag_prefix'] == tag]['tankcnt'].max()
-		df.drop(df[(df['tag_prefix'] == tag) & (df['tankcnt'] < tanks)].index, inplace=True)
+		tag_df = df[df['tag_prefix'] == tag]
+		tanks = tag_df['tankcnt_o'].max() + tag_df['tankcnt_w'].max()
+		df.loc[df['tag_prefix'] == tag, 'tankcnt'] = tanks
+		# df.drop(df[(df['tag_prefix'] == tag) & (df['tankcnt'] < tanks)].index, inplace=True)
 	return df.sort_values(['tag_prefix', 'time'])
 
 def outlier_regression(df, tank_type):
@@ -721,7 +712,8 @@ def rate_plot(df):
 
 if __name__ == '__main__':
 	t0 = time.time()
-	df = rate(tank_split(oracle_pull()))
+	this = oracle_pull()
+	df = tank_match(tank_split(oracle_pull()))
 	tic_df = ticket_pull()
 
 	# df.to_csv('temp_gwr.csv')
