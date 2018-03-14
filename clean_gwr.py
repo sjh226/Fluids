@@ -658,7 +658,7 @@ def turb_contr(gwr_df, turbine_df):
 						   (turbine_df['flow_date'] == time), 'contr'] = contr
 
 			tank_oil = gwr_df[(gwr_df['FacilityName'] == fac) & \
-							  (gwr_df['DateKey'] == time)]['Rate'].mean()
+							  (gwr_df['DateKey'] == time)]['Rate'].mean() * 24
 			turbine_df.loc[(turbine_df['FacilityName'] == fac) & \
 						   (turbine_df['flow_date'] == time), 'oil'] = tank_oil
 
@@ -724,10 +724,10 @@ if __name__ == '__main__':
 	df = rate(tank_split(oracle_pull()))
 	tic_df = ticket_pull()
 
-	df.to_csv('temp_gwr.csv')
-	df = pd.read_csv('temp_gwr.csv')
-	tic_df.to_csv('temp_ticket.csv')
-	tic_df = pd.read_csv('temp_ticket.csv')
+	# df.to_csv('temp_gwr.csv')
+	# df = pd.read_csv('temp_gwr.csv')
+	# tic_df.to_csv('temp_ticket.csv')
+	# tic_df = pd.read_csv('temp_ticket.csv')
 
 	tic_df['date'] = pd.to_datetime(tic_df['date'])
 	df['time'] = pd.to_datetime(df['time'])
