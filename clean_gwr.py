@@ -670,6 +670,44 @@ def sql_push(df, table):
 
 	df.to_sql(table, engine, schema='dbo', if_exists='replace', index=False)
 
+def clean_rate(sql=True):
+	df = tank_match(tank_split(oracle_pull()))
+	tic_df = ticket_pull()
+
+	tic_df['date'] = pd.to_datetime(tic_df['date'])
+	df['time'] = pd.to_datetime(df['time'])
+	clean_rate_df = build_loop(df, tic_df)
+	if sql:
+		sql_push(clean_rate_df, 'cleanGWR')
+
+	return clean_rate_df
+
+def well_contribution(sql=True):
+	turb_df = shift_volumes(turbine_pull())
+	tag_df = tag_pull()
+
+	turb_df = pd.merge(turb_df, tag_df, how='left', right_on='tag_prefix', \
+					   left_on='tag_prefix')
+
+	facility_rate_df = pd.merge(clean_rate_df, tag_df, how='left', \
+								right_on='tag_prefix', left_on='TAG_PREFIX')
+
+	facility_rate_df = facility_rate_df[['FacilityName', 'TANK_TYPE', \
+										 'DateKey', 'Rate']].groupby(\
+					   ['FacilityName', 'TANK_TYPE', 'DateKey'], \
+					   as_index=False).mean()
+	facility_rate_df.sort_values(['FacilityName', 'DateKey'], inplace=True)
+
+	contribution_df = turb_contr(facility_rate_df, turb_df)
+	if sql:
+		sql_push(contribution_df, 'turbineRates')
+
+	return contribution_df
+
+def turb_comp():
+	gwr_df = oracle_pull()
+	turb_df = turbine_pull()
+
 def test_plot(df, clean_df):
 	plt.close()
 	fig, ax = plt.subplots(1, 1, figsize=(10, 10))
@@ -711,61 +749,5 @@ def rate_plot(df):
 
 
 if __name__ == '__main__':
-	t0 = time.time()
-	this = oracle_pull()
-	df = tank_match(tank_split(oracle_pull()))
-	tic_df = ticket_pull()
-
-	# df.to_csv('temp_gwr.csv')
-	# df = pd.read_csv('temp_gwr.csv')
-	# tic_df.to_csv('temp_ticket.csv')
-	# tic_df = pd.read_csv('temp_ticket.csv')
-
-	tic_df['date'] = pd.to_datetime(tic_df['date'])
-	df['time'] = pd.to_datetime(df['time'])
-	clean_rate_df = build_loop(df, tic_df)
-	sql_push(clean_rate_df, 'cleanGWR')
-
-	turb_df = shift_volumes(turbine_pull())
-	tag_df = tag_pull()
-
-	turb_df = pd.merge(turb_df, tag_df, how='left', right_on='tag_prefix', \
-					   left_on='tag_prefix')
-
-	facility_rate_df = pd.merge(clean_rate_df, tag_df, how='left', \
-								right_on='tag_prefix', left_on='TAG_PREFIX')
-
-	facility_rate_df = facility_rate_df[['FacilityName', 'TANK_TYPE', \
-										 'DateKey', 'Rate']].groupby(\
-					   ['FacilityName', 'TANK_TYPE', 'DateKey'], \
-					   as_index=False).mean()
-	facility_rate_df.sort_values(['FacilityName', 'DateKey'], inplace=True)
-
-	contribution_df = turb_contr(facility_rate_df, turb_df)
-	sql_push(contribution_df, 'turbineRates')
-
-	t1 = time.time()
-	print('Took {} seconds to run.'.format(t1-t0))
-
-	# df = tank_pull()
-	# df = pd.read_csv('temp_tank.csv')
-	# df = df[df['tag_prefix'] == 'WAM-USANL20-60']
-
-	# o_df = oracle_pull()
-	# df = rate(tank_split(o_df))
-	# df.to_csv('temp_gwr.csv')
-	# df = pd.read_csv('temp_gwr.csv')
-	# df.drop('Unnamed: 0', axis=1, inplace=True)
-
-	# ticket_df = ticket_pull()
-	# ticket_df.to_csv('temp_ticket.csv')
-	# tic_df = pd.read_csv('temp_ticket.csv')
-	# tic_df['date'] = pd.to_datetime(tic_df['date'])
-	# df['time'] = pd.to_datetime(df['time'])
-	# r_df = build_loop(df, tic_df)
-	# sql_push(r_df)
-
-	# for tag in r_df['TAG_PREFIX'].unique():
-	# 	test_plot(df[(df['tag_prefix'] == tag) & (df['time'] >= '02-01-2018')], \
-	# 			  r_df[(r_df['TAG_PREFIX'] == tag) & (r_df['TANK_TYPE'] == 'CND')].sort_values('DateKey'))
-	# 	rate_plot(r_df[(r_df['TAG_PREFIX'] == tag) & (r_df['DateKey'] >= '02-01-2018')].sort_values('DateKey'))
+	clean_rate_df = clean_rate()
+	contribution_df = well_contribution()
