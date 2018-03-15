@@ -732,9 +732,15 @@ def turb_comp():
 	result_df = pd.merge(fac_df, turb_df, how='inner', left_on=['FacilityName', 'time'], \
 													   right_on=['FacilityName', 'time'])
 	result_df.loc[:,'diff'] = np.abs(result_df['turbine'] - result_df['gwr'])
-	result_df.loc[:,'perc_off'] = result_df['diff'] / result_df['gwr']
+	result_df.loc[:,'perc_off'] = (result_df['diff'] / result_df['gwr']) * 100
 
-	return result_df
+	bad_fac = []
+	for facility in result_df['FacilityName'].unique():
+		max_perc = result_df[result_df['FacilityName'] == facility]['perc_off'].max()
+		if max_perc > 50:
+			bad_fac.append(facility)
+
+	return result_df, bad_fac
 
 def test_plot(df, clean_df):
 	plt.close()
@@ -780,4 +786,4 @@ if __name__ == '__main__':
 	# clean_rate_df = clean_rate()
 	# contribution_df = well_contribution()
 
-	comp_df = turb_comp()
+	comp_df, bad_fac = turb_comp()
