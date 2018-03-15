@@ -705,8 +705,36 @@ def well_contribution(sql=True):
 	return contribution_df
 
 def turb_comp():
-	gwr_df = oracle_pull()
+	gwr_df = tank_match(tank_split(oracle_pull()))[['tag_prefix', 'time', 'oil']]
 	turb_df = turbine_pull()
+
+	tag_df = tag_pull()
+
+	gwr_df.loc[:,'time'] = gwr_df['time'].dt.normalize()
+	max_df = gwr_df.groupby(['tag_prefix', 'time'], as_index=False).max()
+	min_df = gwr_df.groupby(['tag_prefix', 'time'], as_index=False).min()
+	max_df.rename(index=str, columns={'oil':'max'}, inplace=True)
+	min_df.rename(index=str, columns={'oil':'min'}, inplace=True)
+	gwr_df = pd.merge(max_df, min_df, how='inner', left_on=['tag_prefix', 'time'], \
+												   right_on=['tag_prefix', 'time'])
+	gwr_df.loc[:,'diff'] = gwr_df['max'] - gwr_df['min']
+
+	fac_df = pd.merge(gwr_df, tag_df, how='left', left_on='tag_prefix', right_on='tag_prefix')
+	fac_df.drop(['max', 'min', 'API', 'WellFlac', 'Facilitykey', 'tag_prefix'], axis=1, inplace=True)
+	fac_df = fac_df.groupby(['FacilityName', 'time'], as_index=False).sum()
+	fac_df.rename(index=str, columns={'diff':'gwr'}, inplace=True)
+
+	turb_df = pd.merge(turb_df, tag_df, how='left', left_on='tag_prefix', right_on='tag_prefix')
+	turb_df.drop(['tag_prefix', 'API', 'Facilitykey', 'WellFlac'], axis=1, inplace=True)
+	turb_df = turb_df.groupby(['FacilityName', 'flow_date'], as_index=False).sum()
+	turb_df.rename(index=str, columns={'volume':'turbine', 'flow_date':'time'}, inplace=True)
+
+	result_df = pd.merge(fac_df, turb_df, how='inner', left_on=['FacilityName', 'time'], \
+													   right_on=['FacilityName', 'time'])
+	result_df.loc[:,'diff'] = np.abs(result_df['turbine'] - result_df['gwr'])
+	result_df.loc[:,'perc_off'] = result_df['diff'] / result_df['gwr']
+
+	return result_df
 
 def test_plot(df, clean_df):
 	plt.close()
@@ -749,5 +777,7 @@ def rate_plot(df):
 
 
 if __name__ == '__main__':
-	clean_rate_df = clean_rate()
-	contribution_df = well_contribution()
+	# clean_rate_df = clean_rate()
+	# contribution_df = well_contribution()
+
+	comp_df = turb_comp()
