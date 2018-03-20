@@ -10,7 +10,13 @@ import matplotlib.pyplot as plt
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import PolynomialFeatures
 import time
+import PIthon as PIthon
 
+
+def pi_pull():
+	PIthon.connect_to_Server('149.179.68.101')
+	value, timestamp = PIthon.get_tag_snapshot('sinusoid')
+	print('Timestamp: {0} Value: {1}'.format(timestamp, value))
 
 def oracle_pull():
 	connection = cx_Oracle.connect("REPORTING", "REPORTING", "L48APPSP1.WORLD")
@@ -785,5 +791,7 @@ def rate_plot(df):
 if __name__ == '__main__':
 	# clean_rate_df = clean_rate()
 	# contribution_df = well_contribution()
+
+	pi_pull()
 
 	comp_df, bad_fac = turb_comp()
