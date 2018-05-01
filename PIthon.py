@@ -38,6 +38,17 @@ def connect_to_Server(serverName):
 	for item in archiveData :
 		print('Timestamp: {0} Value: {1}'.format(item.Timestamp, item.Value))
 
+def get_tag_values(tagname,timestart,timeend):
+    tag = PIPoint.FindPIPoint(piServer, tagname)
+    timeRange = AFTimeRange(timestart,timeend)
+    boundary = AFBoundaryType.Inside
+    data = tag.RecordedValues(timeRange,boundary,'',False,0)
+    dataList = list(data)
+    print (len(dataList))
+    results = np.zeros((len(dataList), 2), dtype='object')
+    for i, sample in enumerate(data):
+        results[i, :] = np.array([str(sample.Timestamp), str(sample.Value)])
+    return results
 
 def get_tag_snapshot(tagname):
 	tag = PIPoint.FindPIPoint(piServer, tagname)
