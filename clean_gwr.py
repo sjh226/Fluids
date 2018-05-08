@@ -27,12 +27,20 @@ def gwr_pull():
     SQLCommand = ("""
         SELECT Tag_Prefix
         	   ,DateTime
-        	   ,SUM(CASE WHEN Tank LIKE '%TOT%' THEN CAST(Value AS FLOAT) ELSE 0 END) * 20 AS 'TOT'
-        	   ,SUM(CASE WHEN Tank LIKE '%CND%' THEN CAST(Value AS FLOAT) ELSE 0 END) * 20 AS 'CND'
+        	   ,SUM(CASE WHEN Tank LIKE '%CND%' THEN CAST(Value AS FLOAT)
+                    WHEN Tank LIKE '%TOT%' THEN CAST(Value AS FLOAT) ELSE 0 END) * 20 AS 'CND'
         	   ,SUM(CASE WHEN Tank LIKE '%WAT%' THEN CAST(Value AS FLOAT) ELSE 0 END) * 20 AS 'WAT'
           FROM (SELECT *
         		FROM [TeamOptimizationEngineering].[Reporting].[North_GWR]
         		WHERE ISNUMERIC(Value) = 1) AS GWR
+          JOIN [TeamOptimizationEngineering].[Reporting].[PITag_Dict] PTD
+        		ON PTD.TAG = GWR.Tag_Prefix
+		  WHERE PTD.API IN ('4903729563', '4903729534', '4903729531',
+						    '4903729560', '4903729561', '4903729555',
+						    '4903729556', '4903729582', '4903729584',
+						    '4903729551', '4900724584', '4903729547',
+						    '4903729468', '4903729548', '4903729519',
+						    '4903729514')
           GROUP BY Tag_Prefix, DateTime;
 	""")
 
@@ -50,7 +58,7 @@ def gwr_pull():
         print('Dataframe is empty')
 
     return df
-    
+
 def ticket_pull():
     try:
         connection = pyodbc.connect(r'Driver={SQL Server Native Client 11.0};'
@@ -242,9 +250,9 @@ def rebuild(df):
     df.loc[:, 'days'] = (df['time'] - day_min).dt.total_seconds() / (24 * 60 * 60)
 
     # Loop through the same model building process for water, oil, and total
-    for tank_type in ['oil']:
+    for tank_type in ['oil', 'water']:
         if not df[df[tank_type].notnull()].empty:
-            full_df = df[df[tank_type].notnull()]
+            full_df = df.loc[df[tank_type].notnull(), :]
 
             # Block for removing outliers with linear regression
             # full_df = outlier_regression(full_df, tank_type)
@@ -259,11 +267,11 @@ def rebuild(df):
             # Limit dataframe to values where the rate is not 0
             # This is meant to remove repeated values but keep any negative
             # jumps (hauls) which are then reset to a rate of 0
-            value_limited_df = full_df[full_df['rate'] != 0]
+            value_limited_df = full_df.loc[full_df['rate'] != 0, :]
             value_limited_df.loc[value_limited_df['rate'] < -20, 'rate'] = 0
 
             # Remove any small negative fluctuations
-            rate_limited_df = value_limited_df[value_limited_df['rate'] >= 0]
+            rate_limited_df = value_limited_df.loc[value_limited_df['rate'] >= 0, :]
 
             # Calculate second rates off of these filtered values
             rate_limited_df.loc[:, 'rate2'] = \
@@ -281,8 +289,8 @@ def rebuild(df):
             rate_limited_df['rate2'].fillna(method='ffill', inplace=True)
 
             # Limit columns for both dataframes before merging and backfill nan
-            full_df = full_df[['tag_prefix', 'time', tank_type]]
-            rate_limited_df = rate_limited_df[['tag_prefix', 'time', tank_type, 'rate2']]
+            full_df = full_df.loc[:, ['tag_prefix', 'time', tank_type]]
+            rate_limited_df = rate_limited_df.loc[:, ['tag_prefix', 'time', tank_type, 'rate2']]
             type_df = pd.merge(full_df, rate_limited_df, how='left', on=['time', 'tag_prefix', tank_type])
             type_df.fillna(method='bfill', inplace=True)
 
@@ -291,8 +299,6 @@ def rebuild(df):
                 type_df.loc[:, 'TANK_TYPE'] = np.full(type_df.shape[0], 'CND')
             if tank_type == 'water':
                 type_df.loc[:, 'TANK_TYPE'] = np.full(type_df.shape[0], 'WAT')
-            if tank_type == 'total':
-                type_df.loc[:, 'TANK_TYPE'] = np.full(type_df.shape[0], 'TOT')
 
             # Fill in columns to match those expected in SQLDW and append this
             # to the return dataframe
@@ -300,7 +306,7 @@ def rebuild(df):
                                                'time': 'DateKey', \
                                                tank_type: 'TANKLVL', \
                                                'rate2': 'Rate'}, inplace=True)
-            type_df.loc[:, 'CalcDate'] = type_df['DateKey']
+            type_df.loc[:, 'CalcDate'] = type_df.loc[:, 'DateKey']
             return_df = return_df.append(type_df)
 
     return_df = return_df[['TAG_PREFIX', 'DateKey', 'TANK_TYPE', 'TANKLVL', \
@@ -311,19 +317,9 @@ def rebuild(df):
 def build_loop(df, tic_df=None):
     r_df = pd.DataFrame(columns=['TAG_PREFIX', 'DateKey', 'TANK_TYPE', \
                                  'TANKLVL', 'TANKCNT', 'CalcDate', 'Volume'])
+
+    # Loop through each unique tag and run data through cleaning
     for tag in df['tag_prefix'].unique():
-        # ticket = tic_df[(tic_df['ticketType'] != 'Disposition') & (tic_df['TAG'] == tag)]
-        # if df[(df['tag_prefix'] == tag) & (df['oil'].notnull())].shape[0] == 0:
-        #     pass
-        # elif not ticket.empty:
-        #     max_date = ticket['date'].max()
-        #     if max_date > df[df['tag_prefix'] == tag]['time'].max():
-        #         max_date = df[df['tag_prefix'] == tag]['time'].max() - pd.Timedelta('1 days')
-        #
-        #     rtag_df = rebuild(df[(df['tag_prefix'] == tag)])
-        #     r_df = r_df.append(rtag_df)
-        #
-        # else:
         rtag_df = rebuild(df[df['tag_prefix'] == tag])
         r_df = r_df.append(rtag_df)
     return r_df
@@ -367,16 +363,10 @@ def sql_push(df, table):
     df.to_sql(table, engine, schema='dbo', if_exists='replace', index=False)
 
 def clean_rate(sql=True):
-    # df = tank_match(tank_split(oracle_pull()))
-    # print(df.head())
     df = gwr_pull()
-    df.rename(index=str, columns={'datetime':'time', 'tot':'total', \
-                                  'wat':'water', 'cnd':'oil'}, inplace=True)
-    print(df.head())
-    # tic_df = ticket_pull()
+    df.rename(index=str, columns={'datetime':'time', 'wat':'water', \
+                                  'cnd':'oil'}, inplace=True)
 
-    # tic_df['date'] = pd.to_datetime(tic_df['date'])
-    # df['time'] = pd.to_datetime(df['time'])
     clean_rate_df = build_loop(df)
     if sql:
         sql_push(clean_rate_df, 'cleanGWR')
@@ -467,7 +457,6 @@ def test_plot(df, clean_df):
     plt.savefig('images/new_wells/{}_{}.png'.format(clean_df['TANK_TYPE'].unique()[0], \
                                                     clean_df['TAG_PREFIX'].unique()[0]))
 
-
 def rate_plot(df):
     plt.close()
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
@@ -485,7 +474,7 @@ def rate_plot(df):
 
 
 if __name__ == '__main__':
-    clean_rate_df = clean_rate(sql=False)
+    clean_rate_df = clean_rate()
     # contribution_df = well_contribution()
 
     # comp_df, bad_fac = turb_comp()
