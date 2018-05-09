@@ -26,23 +26,26 @@ def gwr_pull():
     cursor = connection.cursor()
     SQLCommand = ("""
         SELECT Tag_Prefix
-        	   ,DateTime
-        	   ,SUM(CASE WHEN Tank LIKE '%CND%' THEN CAST(Value AS FLOAT)
+                ,CONVERT(DATETIME, GWR.DateTime, 0) AS time
+                ,SUM(CASE WHEN Tank LIKE '%CND%' THEN CAST(Value AS FLOAT)
                     WHEN Tank LIKE '%TOT%' THEN CAST(Value AS FLOAT) ELSE 0 END) * 20 AS 'CND'
-        	   ,SUM(CASE WHEN Tank LIKE '%WAT%' THEN CAST(Value AS FLOAT) ELSE 0 END) * 20 AS 'WAT'
-          FROM (SELECT *
-        		FROM [TeamOptimizationEngineering].[Reporting].[North_GWR]
-        		WHERE ISNUMERIC(Value) = 1) AS GWR
-          JOIN [TeamOptimizationEngineering].[Reporting].[PITag_Dict] PTD
-        		ON PTD.TAG = GWR.Tag_Prefix
-		  WHERE PTD.API IN ('4903729563', '4903729534', '4903729531',
-						    '4903729560', '4903729561', '4903729555',
-						    '4903729556', '4903729582', '4903729584',
-						    '4903729551', '4900724584', '4903729547',
-						    '4903729468', '4903729548', '4903729519',
-						    '4903729514')
-          GROUP BY Tag_Prefix, DateTime;
+                ,SUM(CASE WHEN Tank LIKE '%WAT%' THEN CAST(Value AS FLOAT) ELSE 0 END) * 20 AS 'WAT'
+            FROM (SELECT *
+                FROM [TeamOptimizationEngineering].[Reporting].[North_GWR]
+                WHERE ISNUMERIC(Value) = 1) AS GWR
+            JOIN [TeamOptimizationEngineering].[Reporting].[PITag_Dict] PTD
+                ON PTD.TAG = GWR.Tag_Prefix
+        	WHERE PTD.API IN ('4903729563')
+            GROUP BY Tag_Prefix, CONVERT(DATETIME, GWR.DateTime, 0)
+        	ORDER BY Tag_Prefix, CONVERT(DATETIME, GWR.DateTime, 0);
 	""")
+
+    # , '4903729534', '4903729531',
+    #                 '4903729560', '4903729561', '4903729555',
+    #                 '4903729556', '4903729582', '4903729584',
+    #                 '4903729551', '4900724584', '4903729547',
+    #                 '4903729468', '4903729548', '4903729519',
+    #                 '4903729514')
 
     cursor.execute(SQLCommand)
     results = cursor.fetchall()
@@ -250,7 +253,7 @@ def rebuild(df):
     df.loc[:, 'days'] = (df['time'] - day_min).dt.total_seconds() / (24 * 60 * 60)
 
     # Loop through the same model building process for water, oil, and total
-    for tank_type in ['oil', 'water']:
+    for tank_type in ['oil']:
         if not df[df[tank_type].notnull()].empty:
             full_df = df.loc[df[tank_type].notnull(), :]
 
@@ -262,7 +265,7 @@ def rebuild(df):
                                       full_df[tank_type].shift(1)) / \
                                      ((full_df['time'] - \
                                        full_df['time'].shift(1)) / \
-                                      np.timedelta64(1, 'h'))
+                                      np.timedelta64(1, 'm'))
 
             # Limit dataframe to values where the rate is not 0
             # This is meant to remove repeated values but keep any negative
@@ -279,7 +282,7 @@ def rebuild(df):
                  rate_limited_df[tank_type].shift(1)) / \
                 ((rate_limited_df['time'] - \
                   rate_limited_df['time'].shift(1)) / \
-                 np.timedelta64(1, 'h'))
+                 np.timedelta64(1, 'm'))
 
             # Fill negative rates with values from original rate calculation
             # and forward fill 0 rates
@@ -307,6 +310,7 @@ def rebuild(df):
                                                tank_type: 'TANKLVL', \
                                                'rate2': 'Rate'}, inplace=True)
             type_df.loc[:, 'CalcDate'] = type_df.loc[:, 'DateKey']
+            return type_df
             return_df = return_df.append(type_df)
 
     return_df = return_df[['TAG_PREFIX', 'DateKey', 'TANK_TYPE', 'TANKLVL', \
@@ -354,7 +358,7 @@ def turb_contr(gwr_df, turbine_df):
 
 def sql_push(df, table):
     params = urllib.parse.quote_plus('Driver={SQL Server Native Client 11.0};\
-									 Server=SQLDW-TEST-L48.BP.Com;\
+									 Server=SQLDW-L48.BP.Com;\
 									 Database=TeamOperationsAnalytics;\
 									 trusted_connection=yes'
                                      )
@@ -461,7 +465,7 @@ def rate_plot(df):
     plt.close()
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
 
-    ax.plot(df['DateKey'], df['rate'], label='Cleaned GWR Rates')
+    ax.plot(df['DateKey'], df['Rate'], label='Cleaned GWR Rates')
 
     plt.ylim(ymin=0)
     plt.xticks(rotation='vertical')
@@ -474,7 +478,13 @@ def rate_plot(df):
 
 
 if __name__ == '__main__':
+    # df = gwr_pull()
+
     clean_rate_df = clean_rate()
+    # clean_rate_df.to_csv('data/clean_rate.csv')
+    # clean_rate_df = pd.read_csv('data/clean_rate.csv')
     # contribution_df = well_contribution()
 
     # comp_df, bad_fac = turb_comp()
+    # for well in clean_rate_df['TAG_PREFIX'].unique():
+    #     rate_plot(clean_rate_df[clean_rate_df['TAG_PREFIX'] == well])
