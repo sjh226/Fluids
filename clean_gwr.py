@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import scipy as sp
 from scipy.stats import iqr, sem
 import pyodbc
 import sys
@@ -25,7 +26,7 @@ def gwr_pull():
 
     cursor = connection.cursor()
     SQLCommand = ("""
-        SELECT Tag_Prefix
+        SELECT PTD.API
                 ,CONVERT(DATETIME, GWR.DateTime, 0) AS time
                 ,SUM(CASE WHEN Tank LIKE '%CND%' THEN CAST(Value AS FLOAT)
                     WHEN Tank LIKE '%TOT%' THEN CAST(Value AS FLOAT) ELSE 0 END) * 20 AS 'CND'
@@ -35,17 +36,11 @@ def gwr_pull():
                 WHERE ISNUMERIC(Value) = 1) AS GWR
             JOIN [TeamOptimizationEngineering].[Reporting].[PITag_Dict] PTD
                 ON PTD.TAG = GWR.Tag_Prefix
-        	WHERE PTD.API IN ('4903729563')
-            GROUP BY Tag_Prefix, CONVERT(DATETIME, GWR.DateTime, 0)
-        	ORDER BY Tag_Prefix, CONVERT(DATETIME, GWR.DateTime, 0);
+        	WHERE PTD.API IN ('4903729514')
+            AND CONVERT(DATETIME, GWR.DateTime, 0) >= '2018-05-01'
+            GROUP BY PTD.API, CONVERT(DATETIME, GWR.DateTime, 0)
+        	ORDER BY PTD.API, CONVERT(DATETIME, GWR.DateTime, 0);
 	""")
-
-    # , '4903729534', '4903729531',
-    #                 '4903729560', '4903729561', '4903729555',
-    #                 '4903729556', '4903729582', '4903729584',
-    #                 '4903729551', '4900724584', '4903729547',
-    #                 '4903729468', '4903729548', '4903729519',
-    #                 '4903729514')
 
     cursor.execute(SQLCommand)
     results = cursor.fetchall()
@@ -242,6 +237,12 @@ def outlier_regression(df, tank_type):
     else:
         return df[['tag_prefix', 'time', tank_type, 'tankcnt', 'days', 'volume']]
 
+def conf_int(vals, confidence=.95):
+    m, se = np.median(vals), sem(vals)
+    h = se * sp.stats.t._ppf((1+confidence)/2., len(vals)-1)
+    print(np.median(vals))
+    return m, h
+
 def rebuild(df):
     return_df = pd.DataFrame(columns=['TAG_PREFIX', 'DateKey', 'TANK_TYPE', \
                                       'TANKLVL', 'predict', 'rate2', \
@@ -265,24 +266,45 @@ def rebuild(df):
                                       full_df[tank_type].shift(1)) / \
                                      ((full_df['time'] - \
                                        full_df['time'].shift(1)) / \
-                                      np.timedelta64(1, 'm'))
+                                      np.timedelta64(1, 'h'))
 
-            # Limit dataframe to values where the rate is not 0
-            # This is meant to remove repeated values but keep any negative
-            # jumps (hauls) which are then reset to a rate of 0
-            value_limited_df = full_df.loc[full_df['rate'] != 0, :]
-            value_limited_df.loc[value_limited_df['rate'] < -20, 'rate'] = 0
+            vals = full_df.loc[(full_df['rate'].notnull()) & \
+                               (full_df['rate'] != 0), 'rate'].values
+
+            m, h = conf_int(vals)
+
+            # # Limit dataframe to values where the rate is not 0
+            # # This is meant to remove repeated values but keep any negative
+            # # jumps (hauls) which are then reset to a rate of 0
+            # value_limited_df = full_df.loc[full_df['rate'] != 0, :]
+            # value_limited_df.loc[value_limited_df['rate'] < -20, 'rate'] = 0
+
+            value_limited_df = full_df.loc[(full_df['rate'] > (m-h)) & \
+                                           (full_df['rate'] < (m+h))]
+            # return value_limited_df
 
             # Remove any small negative fluctuations
             rate_limited_df = value_limited_df.loc[value_limited_df['rate'] >= 0, :]
+            # return rate_limited_df
 
             # Calculate second rates off of these filtered values
             rate_limited_df.loc[:, 'rate2'] = \
-                (rate_limited_df[tank_type] - \
-                 rate_limited_df[tank_type].shift(1)) / \
-                ((rate_limited_df['time'] - \
-                  rate_limited_df['time'].shift(1)) / \
-                 np.timedelta64(1, 'm'))
+                                    (rate_limited_df[tank_type] - \
+                                     rate_limited_df[tank_type].shift(1)) / \
+                                    ((rate_limited_df['time'] - \
+                                      rate_limited_df['time'].shift(1)) / \
+                                     np.timedelta64(1, 'm'))
+
+            vals = rate_limited_df.loc[(rate_limited_df['rate2'].notnull()) & \
+                                       (rate_limited_df['rate2'] != 0), 'rate2'].values
+
+            m, h = conf_int(vals)
+
+            rate_limited_df = rate_limited_df.loc[(rate_limited_df['rate2'] > (m-h)) & \
+                                                  (rate_limited_df['rate2'] < (m+h))]
+
+            return rate_limited_df
+
 
             # Fill negative rates with values from original rate calculation
             # and forward fill 0 rates
@@ -323,9 +345,9 @@ def build_loop(df, tic_df=None):
                                  'TANKLVL', 'TANKCNT', 'CalcDate', 'Volume'])
 
     # Loop through each unique tag and run data through cleaning
-    for tag in df['tag_prefix'].unique():
-        rtag_df = rebuild(df[df['tag_prefix'] == tag])
-        r_df = r_df.append(rtag_df)
+    for well in df['api'].unique():
+        rwell_df = rebuild(df[df['api'] == well])
+        r_df = r_df.append(rwell_df)
     return r_df
 
 def turb_contr(gwr_df, turbine_df):
@@ -465,7 +487,7 @@ def rate_plot(df):
     plt.close()
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
 
-    ax.plot(df['DateKey'], df['Rate'], label='Cleaned GWR Rates')
+    ax.plot(df['DateKey'], df['Rate'], label='GWR Rates')
 
     plt.ylim(ymin=0)
     plt.xticks(rotation='vertical')
@@ -473,14 +495,29 @@ def rate_plot(df):
     plt.ylabel('bbl/hr Oil')
     plt.title('GWR Rates for {}'.format(df['TAG_PREFIX'].unique()[0].lstrip('WAM-')))
 
-    plt.savefig('images/new_wells/{}rate_{}.png'.format(df['TANK_TYPE'].unique()[0], \
-                                                        df['TAG_PREFIX'].unique()[0]))
+    plt.savefig('images/test_plot.png')
+
+def gwr_plot(df):
+    plt.close()
+    fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+
+    ax.plot(df['time'], df['cnd'], label='GWR Rates')
+
+    plt.ylim(ymin=0)
+    plt.xticks(rotation='vertical')
+    plt.xlabel('Date')
+    plt.ylabel('bbl oil')
+    plt.title('Raw GWR Values for {}'.format(df['tag_prefix'].unique()[0].lstrip('WAM-')))
+
+    plt.savefig('images/gwr_raw/gwr_{}.png'.format(df['tag_prefix'].unique()[0]))
 
 
 if __name__ == '__main__':
     # df = gwr_pull()
+    # for tag in df['tag_prefix'].unique():
+    #     gwr_plot(df[(df['tag_prefix'] == tag) & (df['time'] >= '2018-05-01')])
 
-    clean_rate_df = clean_rate()
+    clean_rate_df = clean_rate(sql=False)
     # clean_rate_df.to_csv('data/clean_rate.csv')
     # clean_rate_df = pd.read_csv('data/clean_rate.csv')
     # contribution_df = well_contribution()
