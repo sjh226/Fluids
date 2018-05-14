@@ -17,16 +17,13 @@ def pullTag(tag, days='-1d', end = 't'):
         i = tag
         prefix = i.split('.')[0]
         tank = i.split('.')[1]
-        print('here')
         print('[+] Pulling ', i)
 
         # results = get_tag_values(i, days, 't')
         results = get_tag_interpolate(i, days, end, minutes=15)
-        print('hello')
         final = []
         for j in results:
             final.append([prefix, tank] + j)
-        print('made it')
         return final
     except:
         pass
@@ -70,7 +67,6 @@ def sql_push(df, table):
 
 
 if __name__ == '__main__':
-    start = time.time()
     Tags = csvToList('data/GottenTagNamesGWR.csv')
     tags_to_pull = []
 
@@ -99,17 +95,15 @@ if __name__ == '__main__':
 
     testCount = len(Tag_limit)
     alldata = []
-    results = Parallel(n_jobs=10)(delayed(pullTag)(i, '-1d') for i in Tag_limit)
+    results = Parallel(n_jobs=10)(delayed(pullTag)(i, '-1d') for i in tags_to_pull)
 
     for i in results:
         try:
             gatheredData += i
         except:
             pass
-    print(time.time() - start)
-    print(len(gatheredData))
 
     listListToCsv(gatheredData, 'data/GWRDump.csv')
     df = pd.read_csv('data/GWRDump.csv')
-    print(df.head())
-    sql_push(pd.read_csv('data/GWRDump.csv'), 'North_GWR')
+    df.rename(index=str, columns={'DateTimeStamp': 'DateTime'}, inplace=True)
+    sql_push(df, 'North_GWR')
