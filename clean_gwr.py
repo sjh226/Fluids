@@ -36,12 +36,12 @@ def gwr_pull():
                 WHERE ISNUMERIC(Value) = 1) AS GWR
             JOIN [TeamOptimizationEngineering].[Reporting].[PITag_Dict] PTD
                 ON PTD.TAG = GWR.Tag_Prefix
-        	WHERE 		   PTD.API IN ('4903729563', '4903729534', '4903729531',
-            							 '4903729560', '4903729561', '4903729555',
-            						  '4903729556', '4903729582', '4903729584',
-            						  '4903729551', '4900724584', '4903729547',
-            						  '4903729468', '4903729548', '4903729519',
-            						  '4903729514')
+            WHERE PTD.API IN ('4903729563', '4903729534', '4903729531',
+    						  '4903729560', '4903729561', '4903729555',
+    						  '4903729556', '4903729582', '4903729584',
+    						  '4903729551', '4900724584', '4903729547',
+    						  '4903729468', '4903729548', '4903729519',
+    						  '4903729514')
             AND CONVERT(DATETIME, GWR.DateTime, 0) >= '2018-05-01'
             GROUP BY PTD.API, CONVERT(DATETIME, GWR.DateTime, 0)
         	ORDER BY PTD.API, CONVERT(DATETIME, GWR.DateTime, 0);
@@ -61,58 +61,6 @@ def gwr_pull():
         print('Dataframe is empty')
 
     return df
-
-def ticket_pull():
-    try:
-        connection = pyodbc.connect(r'Driver={SQL Server Native Client 11.0};'
-                                    r'Server=SQLDW-L48.BP.Com;'
-                                    r'Database=OperationsDataMart;'
-                                    r'trusted_connection=yes'
-                                    )
-    except pyodbc.Error:
-        print("Connection Error")
-        sys.exit()
-
-    cursor = connection.cursor()
-    SQLCommand = ("""
-		SELECT RT.runTicketStartDate AS date
-			  ,PTD.TAG
-			  ,RT.ticketType
-			  ,RT.tankCode
-			  ,DT.Facilitykey
-			  ,RT.grossVolume
-		  FROM [TeamOptimizationEngineering].[Reporting].[PITag_Dict] AS PTD
-		  JOIN [TeamOptimizationEngineering].[dbo].[DimensionsWells] AS DW
-			  ON DW.API = PTD.API
-		  JOIN [TeamOptimizationEngineering].[dbo].[DimensionsTanks] AS DT
-			ON DT.Facilitykey = DW.Facilitykey
-		  JOIN [EDW].[Enbase].[RunTicket] AS RT
-			ON RT.tankCode = DT.TankCode
-		 WHERE DT.BusinessUnit = 'North'
-		   AND CAST(RT.runTicketStartDate AS DATE) >= '01-01-2017'
-		   AND DW.API IN ('4903729563', '4903729534', '4903729531',
-							 '4903729560', '4903729561', '4903729555',
-						  '4903729556', '4903729582', '4903729584',
-						  '4903729551', '4900724584', '4903729547',
-						  '4903729468', '4903729548', '4903729519',
-						  '4903729514');
-	""")
-
-    cursor.execute(SQLCommand)
-    results = cursor.fetchall()
-
-    df = pd.DataFrame.from_records(results)
-    connection.close()
-
-    try:
-        df.columns = pd.DataFrame(np.matrix(cursor.description))[0]
-    except:
-        df = None
-        print('Dataframe is empty')
-
-    df['date'] = pd.to_datetime(df['date'])
-
-    return df.drop_duplicates()
 
 def turbine_pull():
     connection = cx_Oracle.connect("REPORTING", "REPORTING", "L48APPSP1.WORLD")
@@ -154,46 +102,6 @@ def turbine_pull():
     connection.close()
 
     return df
-
-def tag_pull():
-    try:
-        connection = pyodbc.connect(r'Driver={SQL Server Native Client 11.0};'
-                                    r'Server=SQLDW-L48.BP.Com;'
-                                    r'Database=TeamOptimizationEngineering;'
-                                    r'trusted_connection=yes'
-                                    )
-    except pyodbc.Error:
-        print("Connection Error")
-        sys.exit()
-
-    cursor = connection.cursor()
-    SQLCommand = ("""
-		SELECT  PTD.TAG AS tag_prefix
-				,PTD.API
-				,DF.Facilitykey
-				,DF.FacilityName
-				,DW.WellFlac
-		FROM [TeamOptimizationEngineering].[Reporting].[PITag_Dict] AS PTD
-		JOIN [TeamOptimizationEngineering].[dbo].[DimensionsWells] AS DW
-			ON PTD.API = DW.API
-		JOIN [TeamOptimizationEngineering].[dbo].[DimensionsFacilities] AS DF
-			ON DW.Facilitykey = DF.Facilitykey
-		GROUP BY PTD.TAG, PTD.API, DF.Facilitykey, DF.FacilityName, DF.FacilityCapacity, DW.WellFlac;
-	""")
-
-    cursor.execute(SQLCommand)
-    results = cursor.fetchall()
-
-    df = pd.DataFrame.from_records(results)
-    connection.close()
-
-    try:
-        df.columns = pd.DataFrame(np.matrix(cursor.description))[0]
-    except:
-        df = None
-        print('Dataframe is empty')
-
-    return df.drop_duplicates()
 
 def shift_volumes(df):
     result_df = pd.DataFrame(columns=df.columns)
@@ -248,7 +156,7 @@ def conf_int(vals, confidence=.95):
     return m, h
 
 def rebuild(df):
-    return_df = pd.DataFrame(columns=['TAG_PREFIX', 'DateKey', 'TANK_TYPE', \
+    return_df = pd.DataFrame(columns=['API', 'DateKey', 'TANK_TYPE', \
                                       'TANKLVL', 'predict', 'rate2', \
                                       'CalcDate', 'Volume'])
 
@@ -309,9 +217,9 @@ def rebuild(df):
             rate_limited_df['rate2'].fillna(method='bfill', inplace=True)
 
             # Limit columns for both dataframes before merging and backfill nan
-            full_df = full_df.loc[:, ['tag_prefix', 'time', tank_type]]
-            rate_limited_df = rate_limited_df.loc[:, ['tag_prefix', 'time', tank_type, 'rate2']]
-            type_df = pd.merge(full_df, rate_limited_df, how='left', on=['time', 'tag_prefix', tank_type])
+            full_df = full_df.loc[:, ['api', 'time', tank_type]]
+            rate_limited_df = rate_limited_df.loc[:, ['api', 'time', tank_type, 'rate2']]
+            type_df = pd.merge(full_df, rate_limited_df, how='left', on=['time', 'api', tank_type])
             type_df.fillna(method='ffill', inplace=True)
 
             # Fill in tank types depending on which iteration we're on
@@ -322,20 +230,20 @@ def rebuild(df):
 
             # Fill in columns to match those expected in SQLDW and append this
             # to the return dataframe
-            type_df.rename(index=str, columns={'tag_prefix': 'TAG_PREFIX', \
+            type_df.rename(index=str, columns={'api': 'API', \
                                                'time': 'DateKey', \
                                                tank_type: 'TANKLVL', \
                                                'rate2': 'Rate'}, inplace=True)
             type_df.loc[:, 'CalcDate'] = type_df.loc[:, 'DateKey']
             return_df = return_df.append(type_df)
 
-    return_df = return_df[['TAG_PREFIX', 'DateKey', 'TANK_TYPE', 'TANKLVL', \
+    return_df = return_df[['API', 'DateKey', 'TANK_TYPE', 'TANKLVL', \
                            'Rate', 'CalcDate']]
 
-    return return_df.sort_values(['TAG_PREFIX', 'DateKey'])
+    return return_df.sort_values(['API', 'DateKey'])
 
 def build_loop(df, tic_df=None):
-    r_df = pd.DataFrame(columns=['TAG_PREFIX', 'DateKey', 'TANK_TYPE', \
+    r_df = pd.DataFrame(columns=['API', 'DateKey', 'TANK_TYPE', \
                                  'TANKLVL', 'TANKCNT', 'CalcDate', 'Volume'])
 
     # Loop through each unique tag and run data through cleaning
