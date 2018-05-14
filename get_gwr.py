@@ -17,6 +17,7 @@ def pullTag(tag, days='-1d', end = 't'):
         i = tag
         prefix = i.split('.')[0]
         tank = i.split('.')[1]
+        print('here')
         print('[+] Pulling ', i)
 
         # results = get_tag_values(i, days, 't')
@@ -59,8 +60,9 @@ def listListToCsv(input, output):
 def sql_push(df, table):
     params = urllib.parse.quote_plus('Driver={SQL Server Native Client 11.0};\
 									 Server=SQLDW-L48.BP.Com;\
-									 Database=TeamOperationsEngineering;\
-									 trusted_connection=yes'
+									 Database=TeamOptimizationEngineering;\
+     								 UID=ThundercatIO;\
+     								 PWD=thund3rc@t10'
                                      )
     engine = sqlalchemy.create_engine('mssql+pyodbc:///?odbc_connect=%s' % params)
 
@@ -83,7 +85,9 @@ if __name__ == '__main__':
 
     alreadyHave = pullQuery(query)
 
-    Tag_limit = ['WAM-CH320C1-160H','WAM-CH533B3_80D','WAM-CL29_150H','WAM-CL29_160H','WAM-CL32_45H','WAM-LM8_115H','WAM-ML11_150H','WAM-ML11_160D','WAM-ML11_160H']
+    Tag_limit = ['WAM-CH320C1-160H','WAM-CH533B3_80D','WAM-CL29_150H',\
+                 'WAM-CL29_160H','WAM-CL32_45H','WAM-LM8_115H','WAM-ML11_150H',\
+                 'WAM-ML11_160D','WAM-ML11_160H']
     for i in Tags[1:]:
         if i[0] + '.' + i[1] not in alreadyHave:
             if i[0] in Tag_limit:
@@ -106,4 +110,6 @@ if __name__ == '__main__':
     print(len(gatheredData))
 
     listListToCsv(gatheredData, 'data/GWRDump.csv')
+    df = pd.read_csv('data/GWRDump.csv')
+    print(df.head())
     sql_push(pd.read_csv('data/GWRDump.csv'), 'North_GWR')
