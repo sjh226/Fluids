@@ -26,10 +26,10 @@ def gwr_pull():
 
     cursor = connection.cursor()
     SQLCommand = ("""
-        SELECT PTD.API
+        SELECT  PTD.API
                 ,CONVERT(DATETIME, GWR.DateTime, 0) AS time
                 ,SUM(CASE WHEN Tank LIKE '%CND%' THEN CAST(Value AS FLOAT)
-                    WHEN Tank LIKE '%TOT%' THEN CAST(Value AS FLOAT) ELSE 0 END) * 20 AS 'CND'
+                     WHEN Tank LIKE '%TOT%' THEN CAST(Value AS FLOAT) ELSE 0 END) * 20 AS 'CND'
                 ,SUM(CASE WHEN Tank LIKE '%WAT%' THEN CAST(Value AS FLOAT) ELSE 0 END) * 20 AS 'WAT'
             FROM (SELECT *
                 FROM [TeamOptimizationEngineering].[Reporting].[North_GWR]
