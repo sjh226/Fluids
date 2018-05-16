@@ -65,6 +65,43 @@ def sql_push(df, table):
 
     df.to_sql(table, engine, schema='Reporting', if_exists='append', index=False)
 
+def csvToSQL(tableLocation, csvFile, hasHeader=True, delTable=False, calcCol=False):
+    server = '10.75.6.160'
+    cnxn = pyodbc.connect(r'Driver={SQL Server Native Client 11.0};'
+                          r'Server=10.75.6.160;'
+                          r'Database=TeamOptimizationEngineering;'
+						  r'UID=ThundercatIO;'
+						  r'PWD=thund3rc@t10'
+                          )
+    print('[+] Connected to ' + server + '\n   Writing to location ' + tableLocation)
+    with open(csvFile, 'r') as f:
+        reader = csv.reader(f)
+        if hasHeader == True:
+            data = next(reader)
+        query = 'insert into {}'.format(tableLocation) + ' values ({0})'
+        cursor = cnxn.cursor()
+        if delTable == True:
+            cursor.execute('delete from ' + tableLocation)
+        if calcCol == True:
+            import datetime
+            CalcTime = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        for data in tqdm(reader):
+            if calcCol == True:
+                data.append(CalcTime)
+            # print(data)
+            try:
+                query = query.format(','.join('?' * len(data)))
+                # print(query)
+                cursor.execute(query, data)
+            except Exception as e:
+                print('Failed on ', query, e)
+        # try:
+        #     cursor.execute(query, data)
+        # except:
+        #     print(data)
+        cursor.commit()
+
 
 if __name__ == '__main__':
     Tags = csvToList('data/GottenTagNamesGWR.csv')
@@ -106,4 +143,6 @@ if __name__ == '__main__':
     listListToCsv(gatheredData, 'data/GWRDump.csv')
     df = pd.read_csv('data/GWRDump.csv')
     df.rename(index=str, columns={'DateTimeStamp': 'DateTime'}, inplace=True)
-    sql_push(df, 'North_GWR')
+    df.drop_duplicates(inplace=True)
+    # df.to_csv('data/gwr_sql.csv', index=False)
+    sql_push(df, 'GWR_Test')
