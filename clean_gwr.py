@@ -32,7 +32,7 @@ def gwr_pull():
                      WHEN Tank LIKE '%TOT%' THEN CAST(Value AS FLOAT) ELSE 0 END) * 20 AS 'CND'
                 ,SUM(CASE WHEN Tank LIKE '%WAT%' THEN CAST(Value AS FLOAT) ELSE 0 END) * 20 AS 'WAT'
             FROM (SELECT *
-                FROM [TeamOptimizationEngineering].[Reporting].[North_GWR]
+                FROM [TeamOptimizationEngineering].[Reporting].[GWR_Test]
                 WHERE ISNUMERIC(Value) = 1) AS GWR
             JOIN [TeamOptimizationEngineering].[Reporting].[PITag_Dict] PTD
                 ON PTD.TAG = GWR.Tag_Prefix
@@ -187,8 +187,11 @@ def rebuild(df):
 
             # Limit values to only include those with rates within the
             # calculated confidence interval
-            value_limited_df = full_df.loc[(full_df['rate'] > (m-h)) & \
-                                           (full_df['rate'] < (m+h))]
+            if m > 0 and full_df[full_df['rate'] != 0].shape[0] > 10:
+                value_limited_df = full_df.loc[(full_df['rate'] > (m-h)) & \
+                                               (full_df['rate'] < (m+h)), :]
+            else:
+                value_limited_df = full_df.loc[:,:]
 
             # Remove any negative fluctuations
             rate_limited_df = value_limited_df.loc[value_limited_df['rate'] >= 0, :]
@@ -207,8 +210,9 @@ def rebuild(df):
                                        (rate_limited_df['rate2'] != 0), 'rate2'].values
             m, h = conf_int(vals)
 
-            rate_limited_df = rate_limited_df.loc[(rate_limited_df['rate2'] > (m-h)) & \
-                                                  (rate_limited_df['rate2'] < (m+h))]
+            if m > 0 and rate_limited_df[rate_limited_df['rate2'] != 0].shape[0] > 10:
+                rate_limited_df = rate_limited_df.loc[(rate_limited_df['rate2'] > (m-h)) & \
+                                                      (rate_limited_df['rate2'] < (m+h))]
 
             # Fill in any 0 or empty rates with surrounding rates (forward before
             # backwards)
@@ -221,6 +225,7 @@ def rebuild(df):
             rate_limited_df = rate_limited_df.loc[:, ['api', 'time', tank_type, 'rate2']]
             type_df = pd.merge(full_df, rate_limited_df, how='left', on=['time', 'api', tank_type])
             type_df.fillna(method='ffill', inplace=True)
+            type_df.fillna(method='bfill', inplace=True)
 
             # Fill in tank types depending on which iteration we're on
             if tank_type == 'oil':
@@ -248,6 +253,7 @@ def build_loop(df, tic_df=None):
 
     # Loop through each unique tag and run data through cleaning
     for well in df['api'].unique():
+    # for well in ['4903729519']:
         rwell_df = rebuild(df[df['api'] == well])
         r_df = r_df.append(rwell_df)
     return r_df
