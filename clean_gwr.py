@@ -8,6 +8,7 @@ import cx_Oracle
 import sqlalchemy
 import urllib
 import matplotlib.pyplot as plt
+from datetime import date, timedelta
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import PolynomialFeatures
 import time
@@ -26,25 +27,20 @@ def gwr_pull():
 
     cursor = connection.cursor()
     SQLCommand = ("""
-        SELECT  PTD.API
+        SELECT  W.Facilitykey
                 ,CONVERT(DATETIME, GWR.DateTime, 0) AS time
                 ,SUM(CASE WHEN Tank LIKE '%CND%' THEN CAST(Value AS FLOAT)
                      WHEN Tank LIKE '%TOT%' THEN CAST(Value AS FLOAT) ELSE 0 END) * 20 AS 'CND'
                 ,SUM(CASE WHEN Tank LIKE '%WAT%' THEN CAST(Value AS FLOAT) ELSE 0 END) * 20 AS 'WAT'
-            FROM (SELECT *
+        FROM    (SELECT *
                 FROM [TeamOptimizationEngineering].[Reporting].[GWR_Test]
                 WHERE ISNUMERIC(Value) = 1) AS GWR
-            JOIN [TeamOptimizationEngineering].[Reporting].[PITag_Dict] PTD
-                ON PTD.TAG = GWR.Tag_Prefix
-            WHERE PTD.API IN ('4903729563', '4903729534', '4903729531',
-    						  '4903729560', '4903729561', '4903729555',
-    						  '4903729556', '4903729582', '4903729584',
-    						  '4903729551', '4900724584', '4903729547',
-    						  '4903729468', '4903729548', '4903729519',
-    						  '4903729514')
-            AND CONVERT(DATETIME, GWR.DateTime, 0) >= '2018-05-01'
-            GROUP BY PTD.API, CONVERT(DATETIME, GWR.DateTime, 0)
-        	ORDER BY PTD.API, CONVERT(DATETIME, GWR.DateTime, 0);
+        JOIN [TeamOptimizationEngineering].[Reporting].[PITag_Dict] PTD
+          ON PTD.TAG = GWR.Tag_Prefix
+        JOIN [OperationsDataMart].[Dimensions].[Wells] W
+          ON W.API = PTD.API
+        GROUP BY W.Facilitykey, CONVERT(DATETIME, GWR.DateTime, 0)
+    	ORDER BY W.Facilitykey, CONVERT(DATETIME, GWR.DateTime, 0);
 	""")
 
     cursor.execute(SQLCommand)
@@ -63,33 +59,91 @@ def gwr_pull():
     return df
 
 def turbine_pull():
-    connection = cx_Oracle.connect("REPORTING", "REPORTING", "L48APPSP1.WORLD")
+    try:
+        connection = pyodbc.connect(r'Driver={SQL Server Native Client 11.0};'
+                                    r'Server=SQLDW-L48.BP.Com;'
+                                    r'Database=TeamOptimizationEngineering;'
+                                    r'trusted_connection=yes'
+                                    )
+    except pyodbc.Error:
+        print("Connection Error")
+        sys.exit()
 
     cursor = connection.cursor()
-    query = ("""
-		SELECT  TAG_PREFIX
-				,TRUNC(TIME) AS flow_date
-				,MAX(CTS_VC) AS volume
-		FROM DATA_QUALITY.PI_WAM_ALL_WELLS_OPS
-		WHERE (CTS_VC IS NOT NULL)
-		  AND (TAG_PREFIX LIKE 'WAM-CH320C1-160H%'
-			OR TAG_PREFIX LIKE 'WAM-CH452K29150H%'
-			OR TAG_PREFIX LIKE 'WAM-CH533B3_80D%'
-			OR TAG_PREFIX LIKE 'WAM-CL29_150H%'
-			OR TAG_PREFIX LIKE 'WAM-CL29_160H%'
-			OR TAG_PREFIX LIKE 'WAM-HP13_150%'
-			OR TAG_PREFIX LIKE 'WAM-LM8_115H%'
-			OR TAG_PREFIX LIKE 'WAM-ML11_150H%'
-			OR TAG_PREFIX LIKE 'WAM-ML11_160H%'
-			OR TAG_PREFIX LIKE 'WAM-MN9_150D%')
-		GROUP BY TAG_PREFIX, TRUNC(TIME)
-		ORDER BY TAG_PREFIX, TRUNC(TIME)
+
+    SQLCommand = ("""
+        DROP TABLE IF EXISTS #Turbine;
+        DROP TABLE IF EXISTS #Oil;
+        DROP TABLE IF EXISTS #Water;
+    """)
+
+    cursor.execute(SQLCommand)
+
+    SQLCommand = ("""
+        SELECT  T.Tag_Prefix
+                ,T.Tag
+                ,T.DateTime
+                ,T.Value AS Volume
+                ,PTD.API
+        		,W.Facilitykey
+        INTO #Turbine
+        FROM [TeamOptimizationEngineering].[Reporting].[Turbine_Test] T
+        JOIN [TeamOptimizationEngineering].[Reporting].[PITag_Dict] PTD
+          ON PTD.TAG = T.Tag_Prefix
+        JOIN [OperationsDataMart].[Dimensions].[Wells] W
+          ON W.API = PTD.API;
+    """)
+
+    cursor.execute(SQLCommand)
+
+    SQLCommand = ("""
+        SELECT	Facilitykey
+        		,Tag
+        		,SUM(Volume) AS FacOil
+        INTO #Oil
+        FROM #Turbine
+        WHERE Tag LIKE '%CTS%'
+        GROUP BY Facilitykey, Tag;
+
+        SELECT	Facilitykey
+        		,Tag
+        		,SUM(Volume) AS FacWater
+        INTO #Water
+        FROM #Turbine
+        WHERE Tag LIKE '%WAT%'
+        GROUP BY Facilitykey, Tag;
+    """)
+
+    cursor.execute(SQLCommand)
+
+    SQLCommand = ("""
+        SELECT	T.Tag_Prefix
+                ,T.Tag
+                ,T.DateTime
+                ,T.Volume
+                ,T.API
+        		,T.Facilitykey
+        		,O.FacOil
+        		,W.FacWater
+        		,CASE	WHEN FacOil IS NOT NULL
+        				THEN Volume / NULLIF(FacOil, 0)
+        				WHEN FacWater IS NOT NULL
+        				THEN Volume / NULLIF(FacWater, 0)
+        		 ELSE NULL END AS Perc
+        FROM #Turbine T
+        LEFT OUTER JOIN #Oil O
+          ON T.Facilitykey = O.Facilitykey
+          AND T.Tag = O.Tag
+        LEFT OUTER JOIN #Water W
+          ON T.Facilitykey = W.Facilitykey
+          AND T.Tag = W.Tag;
 	""")
 
-    cursor.execute(query)
+    cursor.execute(SQLCommand)
     results = cursor.fetchall()
 
     df = pd.DataFrame.from_records(results)
+    connection.close()
 
     try:
         df.columns = pd.DataFrame(np.matrix(cursor.description))[0]
@@ -98,43 +152,17 @@ def turbine_pull():
         df = None
         print('Dataframe is empty')
 
-    cursor.close()
-    connection.close()
-
     return df
 
-def shift_volumes(df):
-    result_df = pd.DataFrame(columns=df.columns)
-    for tag in df['tag_prefix'].unique():
-        tag_df = df[df['tag_prefix'] == tag]
-        tag_df.loc[:, 'volume'] = tag_df.loc[:, 'volume'].shift(-1)
-        result_df = result_df.append(tag_df)
-    return result_df
+def sql_push(df, table):
+    params = urllib.parse.quote_plus('Driver={SQL Server Native Client 11.0};\
+									 Server=SQLDW-L48.BP.Com;\
+									 Database=TeamOperationsAnalytics;\
+									 trusted_connection=yes'
+                                     )
+    engine = sqlalchemy.create_engine('mssql+pyodbc:///?odbc_connect=%s' % params)
 
-def tank_split(df):
-    water_df = df[df['tank_type'] == 'WAT'][['tag_prefix', 'time', 'tankvol', 'tankcnt']]
-    water_df.columns = ['tag_prefix', 'time', 'water', 'tankcnt_w']
-    oil_df = df[df['tank_type'] == 'CND'][['tag_prefix', 'time', 'tankvol', 'tankcnt']]
-    oil_df.columns = ['tag_prefix', 'time', 'oil', 'tankcnt_o']
-    total_df = df[df['tank_type'] == 'TOT'][['tag_prefix', 'time', 'tankvol', 'tankcnt']]
-    total_df.columns = ['tag_prefix', 'time', 'total', 'tankcnt_t']
-
-    base_df = water_df.merge(oil_df, on=['tag_prefix', 'time'], how='outer')
-    df = base_df.merge(total_df, on=['tag_prefix', 'time'], how='outer')
-
-    df.loc[df['oil'].isnull(), 'oil'] = df.loc[df['oil'].isnull(), 'total'] - \
-                                        df.loc[df['oil'].isnull(), 'water']
-
-    return df.sort_values(['tag_prefix', 'time'])
-
-def tank_match(df):
-    df['tankcnt'] = np.nan
-    for tag in df['tag_prefix'].unique():
-        tag_df = df[df['tag_prefix'] == tag]
-        tanks = tag_df['tankcnt_o'].max() + tag_df['tankcnt_w'].max()
-        df.loc[df['tag_prefix'] == tag, 'tankcnt'] = tanks
-    # df.drop(df[(df['tag_prefix'] == tag) & (df['tankcnt'] < tanks)].index, inplace=True)
-    return df.sort_values(['tag_prefix', 'time'])
+    df.to_sql(table, engine, schema='dbo', if_exists='append', index=False)
 
 def outlier_regression(df, tank_type):
     lr = LinearRegression()
@@ -156,7 +184,7 @@ def conf_int(vals, confidence=.95):
     return m, h
 
 def rebuild(df):
-    return_df = pd.DataFrame(columns=['API', 'DateKey', 'TANK_TYPE', \
+    return_df = pd.DataFrame(columns=['Facilitykey', 'DateKey', 'TANK_TYPE', \
                                       'TANKLVL', 'predict', 'rate2', \
                                       'CalcDate', 'Volume'])
 
@@ -166,7 +194,7 @@ def rebuild(df):
     df.loc[:, 'days'] = (df['time'] - day_min).dt.total_seconds() / (24 * 60 * 60)
 
     # Loop through the same model building process for water, oil, and total
-    for tank_type in ['oil']:
+    for tank_type in ['oil', 'water']:
         if not df[df[tank_type].notnull()].empty:
             full_df = df.loc[df[tank_type].notnull(), :]
 
@@ -178,7 +206,7 @@ def rebuild(df):
                                       full_df[tank_type].shift(1)) / \
                                      ((full_df['time'] - \
                                        full_df['time'].shift(1)) / \
-                                      np.timedelta64(1, 'h'))
+                                      np.timedelta64(1, 'm'))
 
             # Run nonnull, nonzero values through a confidence interval calculation
             vals = full_df.loc[(full_df['rate'].notnull()) & \
@@ -221,9 +249,10 @@ def rebuild(df):
             rate_limited_df['rate2'].fillna(method='bfill', inplace=True)
 
             # Limit columns for both dataframes before merging and backfill nan
-            full_df = full_df.loc[:, ['api', 'time', tank_type]]
-            rate_limited_df = rate_limited_df.loc[:, ['api', 'time', tank_type, 'rate2']]
-            type_df = pd.merge(full_df, rate_limited_df, how='left', on=['time', 'api', tank_type])
+            full_df = full_df.loc[:, ['facilitykey', 'time', tank_type]]
+            rate_limited_df = rate_limited_df.loc[:, ['facilitykey', 'time', tank_type, 'rate2']]
+            type_df = pd.merge(full_df, rate_limited_df, \
+                               how='left', on=['time', 'facilitykey', tank_type])
             type_df.fillna(method='ffill', inplace=True)
             type_df.fillna(method='bfill', inplace=True)
 
@@ -235,201 +264,86 @@ def rebuild(df):
 
             # Fill in columns to match those expected in SQLDW and append this
             # to the return dataframe
-            type_df.rename(index=str, columns={'api': 'API', \
+            type_df.rename(index=str, columns={'facilitykey': 'Facilitykey', \
                                                'time': 'DateKey', \
                                                tank_type: 'TANKLVL', \
                                                'rate2': 'Rate'}, inplace=True)
             type_df.loc[:, 'CalcDate'] = type_df.loc[:, 'DateKey']
             return_df = return_df.append(type_df)
 
-    return_df = return_df[['API', 'DateKey', 'TANK_TYPE', 'TANKLVL', \
+    return_df = return_df[['Facilitykey', 'DateKey', 'TANK_TYPE', 'TANKLVL', \
                            'Rate', 'CalcDate']]
 
-    return return_df.sort_values(['API', 'DateKey'])
+    return return_df.sort_values(['Facilitykey', 'DateKey'])
 
 def build_loop(df, tic_df=None):
-    r_df = pd.DataFrame(columns=['API', 'DateKey', 'TANK_TYPE', \
+    r_df = pd.DataFrame(columns=['Facilitykey', 'DateKey', 'TANK_TYPE', \
                                  'TANKLVL', 'TANKCNT', 'CalcDate', 'Volume'])
 
     # Loop through each unique tag and run data through cleaning
-    for well in df['api'].unique():
-    # for well in ['4903729519']:
-        rwell_df = rebuild(df[df['api'] == well])
+    for well in df['facilitykey'].unique():
+        rwell_df = rebuild(df[df['facilitykey'] == well])
         r_df = r_df.append(rwell_df)
     return r_df
 
-def turb_contr(gwr_df, turbine_df):
-    gwr_df['DateKey'] = pd.DatetimeIndex(gwr_df['DateKey']).normalize()
-    # gwr_df = gwr_df.groupby(['FacilityName', 'TANK_TYPE', 'DateKey'], as_index=False).mean()
-
-    turbine_df.loc[:, 'flow_date'] = pd.to_datetime(turbine_df['flow_date'])
-    turbine_df.loc[:, 'contr'] = np.nan
-    turbine_df.loc[:, 'oil'] = np.nan
-    turbine_df = turbine_df[turbine_df['flow_date'] >= gwr_df['DateKey'].min()]
-
-    for fac in turbine_df['FacilityName'].unique():
-        for time in turbine_df[turbine_df['FacilityName'] == fac]['flow_date']:
-            contr = turbine_df[(turbine_df['FacilityName'] == fac) & \
-                               (turbine_df['flow_date'] == time)]['volume'].sum()
-            turbine_df.loc[(turbine_df['FacilityName'] == fac) & \
-                           (turbine_df['flow_date'] == time), 'contr'] = contr
-
-            tank_oil = gwr_df[(gwr_df['FacilityName'] == fac) & \
-                              (gwr_df['DateKey'] == time)]['Rate'].mean() * 24
-            turbine_df.loc[(turbine_df['FacilityName'] == fac) & \
-                           (turbine_df['flow_date'] == time), 'oil'] = tank_oil
-
-    turbine_df.loc[:, 'contr'] = (turbine_df['volume'] / turbine_df['contr'])
-    turbine_df.loc[:, 'oil_rate'] = (turbine_df['contr'] * turbine_df['oil'])
-    turbine_df.rename(index=str, columns={'tag_prefix': 'TAG_PREFIX', 'flow_date': 'DateKey', \
-                                          'oil_rate': 'OilRate', 'volume': 'TurbVolume'}, inplace=True)
-
-    return turbine_df[['TAG_PREFIX', 'WellFlac', 'FacilityName', 'DateKey', 'TurbVolume', 'OilRate']]
-
-def sql_push(df, table):
-    params = urllib.parse.quote_plus('Driver={SQL Server Native Client 11.0};\
-									 Server=SQLDW-L48.BP.Com;\
-									 Database=TeamOperationsAnalytics;\
-									 trusted_connection=yes'
-                                     )
-    engine = sqlalchemy.create_engine('mssql+pyodbc:///?odbc_connect=%s' % params)
-
-    df.to_sql(table, engine, schema='dbo', if_exists='replace', index=False)
-
 def clean_rate(sql=True):
-    df = gwr_pull()
-    df.rename(index=str, columns={'datetime':'time', 'wat':'water', \
-                                  'cnd':'oil'}, inplace=True)
+    gwr_df = gwr_pull()
+    gwr_df.rename(index=str, columns={'datetime':'time', 'wat':'water', \
+                                     'cnd':'oil'}, inplace=True)
 
-    clean_rate_df = build_loop(df)
-    if sql:
-        sql_push(clean_rate_df, 'cleanGWR')
-
-    return clean_rate_df
-
-def well_contribution(sql=True):
-    turb_df = shift_volumes(turbine_pull())
-    tag_df = tag_pull()
-
-    turb_df = pd.merge(turb_df, tag_df, how='left', right_on='tag_prefix', \
-                       left_on='tag_prefix')
-
-    facility_rate_df = pd.merge(clean_rate_df, tag_df, how='left', \
-                                right_on='tag_prefix', left_on='TAG_PREFIX')
-
-    facility_rate_df = facility_rate_df[['FacilityName', 'TANK_TYPE', \
-                                         'DateKey', 'Rate']].groupby( \
-        ['FacilityName', 'TANK_TYPE', 'DateKey'], \
-        as_index=False).mean()
-    facility_rate_df.sort_values(['FacilityName', 'DateKey'], inplace=True)
-
-    contribution_df = turb_contr(facility_rate_df, turb_df)
-    if sql:
-        sql_push(contribution_df, 'turbineRates')
-
-    return contribution_df
-
-def turb_comp():
-    gwr_df = tank_match(tank_split(oracle_pull()))[['tag_prefix', 'time', 'oil']]
+    clean_rate_df = build_loop(gwr_df)
     turb_df = turbine_pull()
+    turb_df['datetime'] = pd.to_datetime(turb_df['datetime'])
 
-    tag_df = tag_pull()
+    gwr_oil = clean_rate_df.loc[(clean_rate_df['TANK_TYPE'] == 'CND') & \
+                                (clean_rate_df['DateKey'].dt.date == date.today() - timedelta(1)), \
+                               ['DateKey', 'Facilitykey', 'TANK_TYPE', 'Rate']]
+    gwr_wat = clean_rate_df.loc[(clean_rate_df['TANK_TYPE'] == 'WAT') & \
+                                (clean_rate_df['DateKey'].dt.date == date.today() - timedelta(1)), \
+                               ['DateKey', 'Facilitykey', 'TANK_TYPE', 'Rate']]
 
-    gwr_df.loc[:, 'time'] = gwr_df['time'].dt.normalize()
-    max_df = gwr_df.groupby(['tag_prefix', 'time'], as_index=False).max()
-    min_df = gwr_df.groupby(['tag_prefix', 'time'], as_index=False).min()
-    max_df.rename(index=str, columns={'oil': 'max'}, inplace=True)
-    min_df.rename(index=str, columns={'oil': 'min'}, inplace=True)
-    gwr_df = pd.merge(max_df, min_df, how='inner', left_on=['tag_prefix', 'time'], \
-                      right_on=['tag_prefix', 'time'])
-    gwr_df.loc[:, 'diff'] = gwr_df['max'] - gwr_df['min']
+    turb_oil = turb_df.loc[(turb_df['tag'] == 'CTS_VY') & \
+                           (turb_df['datetime'].dt.date == date.today() - timedelta(1)), \
+                          ['api', 'facilitykey', 'datetime', 'perc']]
+    turb_wat = turb_df.loc[(turb_df['tag'] == 'WAT_VY') & \
+                           (turb_df['datetime'].dt.date == date.today() - timedelta(1)), \
+                          ['api', 'facilitykey', 'datetime', 'perc']]
 
-    fac_df = pd.merge(gwr_df, tag_df, how='left', left_on='tag_prefix', right_on='tag_prefix')
-    fac_df.drop(['max', 'min', 'API', 'WellFlac', 'Facilitykey', 'tag_prefix'], axis=1, inplace=True)
-    fac_df = fac_df.groupby(['FacilityName', 'time'], as_index=False).sum()
-    fac_df.rename(index=str, columns={'diff': 'gwr'}, inplace=True)
+    oil_df = turbine_comp(gwr_oil, turb_oil)
+    oil_df.rename(index=str, columns={'api': 'API', 'Facility': 'Facilitykey', \
+                                      'Date': 'DateKey', 'Vol': 'Rate'}, inplace=True)
+    oil_df['Tank_Type'] = 'CND'
 
-    turb_df = pd.merge(turb_df, tag_df, how='left', left_on='tag_prefix', right_on='tag_prefix')
-    turb_df.drop(['tag_prefix', 'API', 'Facilitykey', 'WellFlac'], axis=1, inplace=True)
-    turb_df = turb_df.groupby(['FacilityName', 'flow_date'], as_index=False).sum()
-    turb_df.rename(index=str, columns={'volume': 'turbine', 'flow_date': 'time'}, inplace=True)
+    wat_df = turbine_comp(gwr_wat, turb_wat)
+    wat_df.rename(index=str, columns={'api': 'API', 'Facility': 'Facilitykey', \
+                                      'Date': 'DateKey', 'Vol': 'Rate'}, inplace=True)
+    wat_df['Tank_Type'] = 'WAT'
 
-    result_df = pd.merge(fac_df, turb_df, how='inner', left_on=['FacilityName', 'time'], \
-                         right_on=['FacilityName', 'time'])
-    result_df.loc[:, 'diff'] = np.abs(result_df['turbine'] - result_df['gwr'])
-    result_df.loc[:, 'perc_off'] = (result_df['diff'] / result_df['gwr']) * 100
+    contr_df = oil_df.append(wat_df)
 
-    bad_fac = []
-    for facility in result_df['FacilityName'].unique():
-        max_perc = result_df[result_df['FacilityName'] == facility]['perc_off'].max()
-        if max_perc > 50:
-            bad_fac.append(facility)
+    if sql:
+        sql_push(contr_df, 'cleanGWR')
 
-    return result_df, bad_fac
+    return contr_df
 
-def test_plot(df, clean_df):
-    plt.close()
-    fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+def turbine_comp(gwr_df, turb_df):
+    gwr_df['DateKey'] = pd.to_datetime(gwr_df['DateKey']).dt.date
 
-    ax.plot(df['time'], df['oil'], label='GWR Reading')
-    ax.plot(clean_df['DateKey'], clean_df['predict'], color='red', label='Cleaned Values')
+    gwr_day_df = gwr_df.groupby(['DateKey', 'Facilitykey', 'TANK_TYPE'], \
+                                as_index=False).mean()
+    gwr_day_df.loc[:, 'Rate'] = gwr_day_df.loc[:, 'Rate'] * 60 * 24
+    gwr_day_df['DateKey'] = pd.to_datetime(gwr_day_df['DateKey'])
 
-    cnt = 0
-    if len(ax.xaxis.get_ticklabels()) > 12:
-        for label in ax.xaxis.get_ticklabels():
-            if cnt % 17 == 0:
-                label.set_visible(True)
-            else:
-                label.set_visible(False)
-            cnt += 1
-    plt.ylim(ymin=0)
-    plt.xticks(rotation='vertical')
-    plt.xlabel('Date')
-    plt.ylabel('bbl Oil')
-    plt.title('Cleaned GWR Data for {}'.format(clean_df['TAG_PREFIX'].unique()[0].lstrip('WAM-')))
+    contr_df = turb_df.merge(gwr_day_df, how='outer', \
+                             left_on=['facilitykey', 'datetime'], \
+                             right_on=['Facilitykey', 'DateKey'])
+    contr_df['VolRate'] = contr_df.loc[:, 'Rate'] * contr_df.loc[:, 'perc']
 
-    plt.savefig('images/new_wells/{}_{}.png'.format(clean_df['TANK_TYPE'].unique()[0], \
-                                                    clean_df['TAG_PREFIX'].unique()[0]))
+    contr_df['Facility'] = contr_df['Facilitykey'].fillna(contr_df['facilitykey'])
+    contr_df['Date'] = contr_df['DateKey'].fillna(contr_df['datetime'])
+    contr_df['Vol'] = contr_df['VolRate'].fillna(contr_df['Rate'])
 
-def rate_plot(df):
-    plt.close()
-    fig, ax = plt.subplots(1, 1, figsize=(10, 10))
-
-    ax.plot(df['DateKey'], df['Rate'], label='GWR Rates')
-
-    plt.ylim(ymin=0)
-    plt.xticks(rotation='vertical')
-    plt.xlabel('Date')
-    plt.ylabel('bbl/hr Oil')
-    plt.title('GWR Rates for {}'.format(df['TAG_PREFIX'].unique()[0].lstrip('WAM-')))
-
-    plt.savefig('images/test_plot.png')
-
-def gwr_plot(df):
-    plt.close()
-    fig, ax = plt.subplots(1, 1, figsize=(10, 10))
-
-    ax.plot(df['time'], df['cnd'], label='GWR Rates')
-
-    plt.ylim(ymin=0)
-    plt.xticks(rotation='vertical')
-    plt.xlabel('Date')
-    plt.ylabel('bbl oil')
-    plt.title('Raw GWR Values for {}'.format(df['api'].unique()[0]))
-
-    plt.savefig('images/gwr_raw/gwr_{}.png'.format(df['api'].unique()[0]))
-
+    return contr_df[['api', 'Facility', 'Date', 'Vol']]
 
 if __name__ == '__main__':
-    # df = gwr_pull()
-    # for api in df['api'].unique():
-    #     gwr_plot(df[(df['api'] == api) & (df['time'] >= '2018-05-01')])
-
     clean_rate_df = clean_rate(sql=True)
-    # clean_rate_df.to_csv('data/clean_rate.csv')
-    # clean_rate_df = pd.read_csv('data/clean_rate.csv')
-    # contribution_df = well_contribution()
-
-    # comp_df, bad_fac = turb_comp()
-    # for well in clean_rate_df['TAG_PREFIX'].unique():
-    #     rate_plot(clean_rate_df[clean_rate_df['TAG_PREFIX'] == well])
