@@ -19,7 +19,6 @@ def pullTag(tag, days='-1d', end='t'):
         tank = i.split('.')[1]
         print('[+] Pulling ', i)
 
-        # results = get_tag_values(i, days, 't')
         results = get_tag_interpolate(i, days, end, minutes=15)
         final = []
         for j in results:
@@ -35,7 +34,6 @@ def pullTurbine(tag, days='-1d', end='t'):
         tank = i.split('.')[1]
         print('[+] Pulling ', i)
 
-        # results = get_tag_values(i, days, 't')
         results = get_tag_interpolate(i, days, end, minutes=15)
         final = []
         for j in results:
@@ -75,10 +73,10 @@ def tag_pull():
         FROM [TeamOptimizationEngineering].[Reporting].[PITag_Dict] P
         INNER JOIN [OperationsDataMart].[Dimensions].[Wells] W
             ON W.API = P.API
-        WHERE P.API IN ('4903729563', '4903729534', '4903729531', '4903729560',
-                        '4903729561', '4903729555', '4903729556', '4903729582',
-                        '4903729584', '4903729551', '4900724584', '4903729547',
-                        '4903729468', '4903729548', '4903729519', '4903729514');
+        --WHERE P.API IN ('4903729563', '4903729534', '4903729531', '4903729560',
+        --                '4903729561', '4903729555', '4903729556', '4903729582',
+        --                '4903729584', '4903729551', '4900724584', '4903729547',
+        --                '4903729468', '4903729548', '4903729519', '4903729514');
 	""")
 
     cursor.execute(SQLCommand)
@@ -120,7 +118,7 @@ def sql_push(df, table):
 
     df.to_sql(table, engine, schema='Reporting', if_exists='append', index=False)
 
-def pull_gwr(tags, tag_limit):
+def pull_gwr(tags=None, tag_limit=None):
     tags_to_pull = []
 
     query = '''
@@ -132,16 +130,18 @@ def pull_gwr(tags, tag_limit):
 
     alreadyHave = pullQuery(query)
 
-    for i in tags[1:]:
-        if i[0] + '.' + i[1] not in alreadyHave:
-            if i[0] in tag_limit:
-                tags_to_pull.append(i[0] + '.' + i[1])
-        else:
-            print(i)
+    if tags:
+        for i in tags[1:]:
+            if i[0] + '.' + i[1] not in alreadyHave:
+                if i[0] in tag_limit:
+                    tags_to_pull.append(i[0] + '.' + i[1])
+            else:
+                print(i)
+    else:
+        tags_to_pull = tag_pull()
 
     gatheredData = [['Tag_Prefix', 'Tank', 'DateTimeStamp', 'Value']]
 
-    testCount = len(tag_limit)
     alldata = []
     results = Parallel(n_jobs=10)(delayed(pullTag)(i, '-1d') for i in tags_to_pull)
 
@@ -190,5 +190,5 @@ if __name__ == '__main__':
                  'WAM-CL29_160H','WAM-CL32_45H','WAM-LM8_115H','WAM-ML11_150H',\
                  'WAM-ML11_160D','WAM-ML11_160H']
 
-    # pull_gwr(tags, tag_limit)
-    df = turbine_pull()
+    pull_gwr()
+    turbine_pull()
