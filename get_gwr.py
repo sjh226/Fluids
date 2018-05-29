@@ -73,10 +73,10 @@ def tag_pull():
         FROM [TeamOptimizationEngineering].[Reporting].[PITag_Dict] P
         INNER JOIN [OperationsDataMart].[Dimensions].[Wells] W
             ON W.API = P.API
-        WHERE P.API IN ('4903729563', '4903729534', '4903729531', '4903729560',
-                        '4903729561', '4903729555', '4903729556', '4903729582',
-                        '4903729584', '4903729551', '4900724584', '4903729547',
-                        '4903729468', '4903729548', '4903729519', '4903729514');
+        --WHERE P.API IN ('4903729563', '4903729534', '4903729531', '4903729560',
+        --                '4903729561', '4903729555', '4903729556', '4903729582',
+        --                '4903729584', '4903729551', '4900724584', '4903729547',
+        --                '4903729468', '4903729548', '4903729519', '4903729514');
 	""")
 
     cursor.execute(SQLCommand)
@@ -118,7 +118,7 @@ def sql_push(df, table):
 
     df.to_sql(table, engine, schema='Reporting', if_exists='append', index=False)
 
-def pull_gwr(tags=None, tag_limit=None):
+def pull_gwr(tags, tag_limit=None):
     tags_to_pull = []
 
     query = '''
@@ -130,7 +130,7 @@ def pull_gwr(tags=None, tag_limit=None):
 
     alreadyHave = pullQuery(query)
 
-    if tags:
+    if tag_limit:
         for i in tags[1:]:
             if i[0] + '.' + i[1] not in alreadyHave:
                 if i[0] in tag_limit:
@@ -138,7 +138,8 @@ def pull_gwr(tags=None, tag_limit=None):
             else:
                 print(i)
     else:
-        tags_to_pull = tag_pull()
+        for i in tags[1:]:
+            tags_to_pull.append(i[0] + '.' + i[1])
 
     gatheredData = [['Tag_Prefix', 'Tank', 'DateTimeStamp', 'Value']]
 
@@ -193,5 +194,5 @@ if __name__ == '__main__':
                  'WAM-ML11_160D','WAM-ML11_160H']
 
     # pull_gwr(tags, tag_limit)
-    pull_gwr()
+    pull_gwr(tags)
     turbine_pull()
