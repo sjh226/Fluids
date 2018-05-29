@@ -4,7 +4,6 @@ import scipy as sp
 from scipy.stats import iqr, sem
 import pyodbc
 import sys
-import cx_Oracle
 import sqlalchemy
 import urllib
 import matplotlib.pyplot as plt
@@ -39,6 +38,8 @@ def gwr_pull():
           ON PTD.TAG = GWR.Tag_Prefix
         JOIN [OperationsDataMart].[Dimensions].[Wells] W
           ON W.API = PTD.API
+        WHERE CONVERT(DATETIME, GWR.DateTime, 0) >= DATEADD(day, DATEDIFF(day, 1, GETDATE()), 0)
+          AND CONVERT(DATETIME, GWR.DateTime, 0) < DATEADD(day, DATEDIFF(day, 0, GETDATE()), 0)
         GROUP BY W.Facilitykey, CONVERT(DATETIME, GWR.DateTime, 0)
     	ORDER BY W.Facilitykey, CONVERT(DATETIME, GWR.DateTime, 0);
 	""")
@@ -91,7 +92,9 @@ def turbine_pull():
         JOIN [TeamOptimizationEngineering].[Reporting].[PITag_Dict] PTD
           ON PTD.TAG = T.Tag_Prefix
         JOIN [OperationsDataMart].[Dimensions].[Wells] W
-          ON W.API = PTD.API;
+          ON W.API = PTD.API
+        WHERE T.DateTime >= DATEADD(day, DATEDIFF(day, 1, GETDATE()), 0)
+          AND T.DateTime < DATEADD(day, DATEDIFF(day, 0, GETDATE()), 0);
     """)
 
     cursor.execute(SQLCommand)
@@ -320,6 +323,7 @@ def clean_rate(sql=True):
     wat_df['Tank_Type'] = 'WAT'
 
     contr_df = oil_df.append(wat_df)
+    contr_df.drop_duplicates(inplace=True)
 
     if sql:
         sql_push(contr_df, 'cleanGWR')

@@ -73,10 +73,10 @@ def tag_pull():
         FROM [TeamOptimizationEngineering].[Reporting].[PITag_Dict] P
         INNER JOIN [OperationsDataMart].[Dimensions].[Wells] W
             ON W.API = P.API
-        --WHERE P.API IN ('4903729563', '4903729534', '4903729531', '4903729560',
-        --                '4903729561', '4903729555', '4903729556', '4903729582',
-        --                '4903729584', '4903729551', '4900724584', '4903729547',
-        --                '4903729468', '4903729548', '4903729519', '4903729514');
+        WHERE P.API IN ('4903729563', '4903729534', '4903729531', '4903729560',
+                        '4903729561', '4903729555', '4903729556', '4903729582',
+                        '4903729584', '4903729551', '4900724584', '4903729547',
+                        '4903729468', '4903729548', '4903729519', '4903729514');
 	""")
 
     cursor.execute(SQLCommand)
@@ -155,6 +155,7 @@ def pull_gwr(tags=None, tag_limit=None):
     df = pd.read_csv('data/GWRDump.csv')
     df.rename(index=str, columns={'DateTimeStamp': 'DateTime'}, inplace=True)
     df.drop_duplicates(inplace=True)
+    df.loc[:, 'Value'] = pd.to_numeric(df.loc[:, 'Value'], errors='coerce')
     # df.to_csv('data/gwr_sql.csv', index=False)
     sql_push(df, 'GWR_Test')
 
@@ -182,6 +183,7 @@ def turbine_pull():
     df['DateTime'] = pd.to_datetime(df['DateTime']).dt.date
     df = df.groupby(['Tag_Prefix', 'Tag', 'DateTime'], as_index=False).max()
     df = df.loc[df['DateTime'] == date.today() - timedelta(1), :]
+    df.loc[:, 'Value'] = pd.to_numeric(df.loc[:, 'Value'], errors='coerce')
     sql_push(df, 'Turbine_Test')
 
 if __name__ == '__main__':
@@ -190,5 +192,6 @@ if __name__ == '__main__':
                  'WAM-CL29_160H','WAM-CL32_45H','WAM-LM8_115H','WAM-ML11_150H',\
                  'WAM-ML11_160D','WAM-ML11_160H']
 
+    # pull_gwr(tags, tag_limit)
     pull_gwr()
     turbine_pull()
