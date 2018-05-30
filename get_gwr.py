@@ -110,20 +110,19 @@ def listListToCsv(input, output):
 def sql_push(df, table):
     params = urllib.parse.quote_plus('Driver={SQL Server Native Client 11.0};\
 									 Server=SQLDW-L48.BP.Com;\
-									 Database=TeamOptimizationEngineering;\
-     								 UID=ThundercatIO;\
-     								 PWD=thund3rc@t10'
+									 Database=TeamOperationsAnalytics;\
+     								 trusted_connection=yes;'
                                      )
     engine = sqlalchemy.create_engine('mssql+pyodbc:///?odbc_connect=%s' % params)
 
-    df.to_sql(table, engine, schema='Reporting', if_exists='append', index=False)
+    df.to_sql(table, engine, schema='dbo', if_exists='append', index=False)
 
 def pull_gwr(tags, tag_limit=None):
     tags_to_pull = []
 
     query = '''
         SELECT DISTINCT concat([Tag_Prefix],'.',[Tank])
-          FROM [TeamOptimizationEngineering].[Reporting].[GWR_Test]
+          FROM [TeamOperationsAnalytics].[dbo].[North_GWR]
           WITH (NoLock)
           WHERE cast([DateTime] AS DATE)  = cast(getdate()-1 AS DATE)
     '''
@@ -155,10 +154,12 @@ def pull_gwr(tags, tag_limit=None):
     listListToCsv(gatheredData, 'data/GWRDump.csv')
     df = pd.read_csv('data/GWRDump.csv')
     df.rename(index=str, columns={'DateTimeStamp': 'DateTime'}, inplace=True)
+    df['DateTime'] = pd.to_datetime(df['DateTime'])
     df.drop_duplicates(inplace=True)
     df.loc[:, 'Value'] = pd.to_numeric(df.loc[:, 'Value'], errors='coerce')
+    df.to_csv('data/GWRDump.csv', index=False)
     # df.to_csv('data/gwr_sql.csv', index=False)
-    sql_push(df, 'GWR_Test')
+    sql_push(df, 'North_GWR')
 
 def turbine_pull():
     tag_df = tag_pull()
@@ -185,7 +186,7 @@ def turbine_pull():
     df = df.groupby(['Tag_Prefix', 'Tag', 'DateTime'], as_index=False).max()
     df = df.loc[df['DateTime'] == date.today() - timedelta(1), :]
     df.loc[:, 'Value'] = pd.to_numeric(df.loc[:, 'Value'], errors='coerce')
-    sql_push(df, 'Turbine_Test')
+    sql_push(df, 'North_Turbine')
 
 if __name__ == '__main__':
     tags = csvToList('data/GottenTagNamesGWR.csv')
@@ -194,5 +195,5 @@ if __name__ == '__main__':
                  'WAM-ML11_160D','WAM-ML11_160H']
 
     # pull_gwr(tags, tag_limit)
-    pull_gwr(tags)
+    pull_gwr(tags=tags)
     turbine_pull()

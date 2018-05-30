@@ -17,7 +17,7 @@ def gwr_pull():
     try:
         connection = pyodbc.connect(r'Driver={SQL Server Native Client 11.0};'
                                     r'Server=SQLDW-L48.BP.Com;'
-                                    r'Database=TeamOptimizationEngineering;'
+                                    r'Database=TeamOperationsAnalytics;'
                                     r'trusted_connection=yes'
                                     )
     except pyodbc.Error:
@@ -32,7 +32,7 @@ def gwr_pull():
                      WHEN Tank LIKE '%TOT%' THEN CAST(Value AS FLOAT) ELSE 0 END) * 20 AS 'CND'
                 ,SUM(CASE WHEN Tank LIKE '%WAT%' THEN CAST(Value AS FLOAT) ELSE 0 END) * 20 AS 'WAT'
         FROM    (SELECT *
-                FROM [TeamOptimizationEngineering].[Reporting].[GWR_Test]
+                FROM [TeamOperationsAnalytics].[dbo].[North_GWR]
                 WHERE ISNUMERIC(Value) = 1) AS GWR
         JOIN [TeamOptimizationEngineering].[Reporting].[PITag_Dict] PTD
           ON PTD.TAG = GWR.Tag_Prefix
@@ -63,7 +63,7 @@ def turbine_pull():
     try:
         connection = pyodbc.connect(r'Driver={SQL Server Native Client 11.0};'
                                     r'Server=SQLDW-L48.BP.Com;'
-                                    r'Database=TeamOptimizationEngineering;'
+                                    r'Database=TeamOperationsAnalytics;'
                                     r'trusted_connection=yes'
                                     )
     except pyodbc.Error:
@@ -88,13 +88,13 @@ def turbine_pull():
                 ,PTD.API
         		,W.Facilitykey
         INTO #Turbine
-        FROM [TeamOptimizationEngineering].[Reporting].[Turbine_Test] T
+        FROM [TeamOperationsAnalytics].[dbo].[North_Turbine] T
         JOIN [TeamOptimizationEngineering].[Reporting].[PITag_Dict] PTD
           ON PTD.TAG = T.Tag_Prefix
         JOIN [OperationsDataMart].[Dimensions].[Wells] W
           ON W.API = PTD.API
-        WHERE T.DateTime >= DATEADD(day, DATEDIFF(day, 1, GETDATE()), 0)
-          AND T.DateTime < DATEADD(day, DATEDIFF(day, 0, GETDATE()), 0);
+        WHERE CONVERT(DATETIME, T.DateTime, 0) >= DATEADD(day, DATEDIFF(day, 1, GETDATE()), 0)
+          AND CONVERT(DATETIME, T.DateTime, 0) < DATEADD(day, DATEDIFF(day, 0, GETDATE()), 0);
     """)
 
     cursor.execute(SQLCommand)
