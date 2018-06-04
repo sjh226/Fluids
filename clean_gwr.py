@@ -27,21 +27,21 @@ def gwr_pull():
     cursor = connection.cursor()
     SQLCommand = ("""
         SELECT  W.Facilitykey
-                ,CONVERT(DATETIME, GWR.DateTime, 0) AS time
+                ,CONVERT(DATETIME, LEFT(REPLACE(GWR.DateTime,' ','T'), 19), 0) AS time
                 ,SUM(CASE WHEN Tank LIKE '%CND%' THEN CAST(Value AS FLOAT)
-                     WHEN Tank LIKE '%TOT%' THEN CAST(Value AS FLOAT) ELSE 0 END) * 20 AS 'CND'
+                        WHEN Tank LIKE '%TOT%' THEN CAST(Value AS FLOAT) ELSE 0 END) * 20 AS 'CND'
                 ,SUM(CASE WHEN Tank LIKE '%WAT%' THEN CAST(Value AS FLOAT) ELSE 0 END) * 20 AS 'WAT'
         FROM    (SELECT *
                 FROM [TeamOperationsAnalytics].[dbo].[North_GWR]
                 WHERE ISNUMERIC(Value) = 1) AS GWR
         JOIN [TeamOptimizationEngineering].[Reporting].[PITag_Dict] PTD
-          ON PTD.TAG = GWR.Tag_Prefix
+            ON PTD.TAG = GWR.Tag_Prefix
         JOIN [OperationsDataMart].[Dimensions].[Wells] W
-          ON W.API = PTD.API
-        WHERE CONVERT(DATETIME, GWR.DateTime, 0) >= DATEADD(day, DATEDIFF(day, 1, GETDATE()), 0)
-          AND CONVERT(DATETIME, GWR.DateTime, 0) < DATEADD(day, DATEDIFF(day, 0, GETDATE()), 0)
-        GROUP BY W.Facilitykey, CONVERT(DATETIME, GWR.DateTime, 0)
-    	ORDER BY W.Facilitykey, CONVERT(DATETIME, GWR.DateTime, 0);
+            ON W.API = PTD.API
+        WHERE CONVERT(DATETIME, LEFT(REPLACE(GWR.DateTime,' ','T'), 19), 0) >= DATEADD(day, DATEDIFF(day, 1, GETDATE()), 0)
+            AND CONVERT(DATETIME, LEFT(REPLACE(GWR.DateTime,' ','T'), 19), 0) < DATEADD(day, DATEDIFF(day, 0, GETDATE()), 0)
+        GROUP BY W.Facilitykey, CONVERT(DATETIME, LEFT(REPLACE(GWR.DateTime,' ','T'), 19), 0)
+        ORDER BY W.Facilitykey, CONVERT(DATETIME, LEFT(REPLACE(GWR.DateTime,' ','T'), 19), 0);
 	""")
 
     cursor.execute(SQLCommand)
